@@ -1,0 +1,3 @@
+# Optional local semantic embeddings and cross-encoder reranking on Windows.
+# If pip fails with a long-path error while installing torch, enable Windows Long Paths first.
+sentence-transformers==3.3.1

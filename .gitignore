@@ -1,0 +1,22 @@
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.venv/
+venv/
+.env
+*.sqlite
+*.sqlite3
+*.db
+*.log
+data/uploads/*
+data/chroma/*
+data/sqlite/*
+!data/uploads/.gitkeep
+!data/chroma/.gitkeep
+!data/sqlite/.gitkeep
+# Runtime artifacts created when the backend/frontend run
+backend/data/
+.DS_Store
+

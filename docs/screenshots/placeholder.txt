@@ -1,0 +1,8 @@
+Add screenshots here after running the app locally:
+
+- Login screen
+- Document upload
+- Chat response with citations
+- Evaluation metrics
+- Admin query logs
+
