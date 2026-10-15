@@ -397,10 +397,13 @@ with st.sidebar:
         st.caption(f"{st.session_state.get('username')} | {st.session_state.get('role')}")
         if st.button("Sign out"):
             st.session_state.clear()
+            st.session_state["page"] = "Login"
             st.rerun()
+
     page = st.radio(
         "Navigation",
         ["Login", "Upload Documents", "Chat", "Evaluation", "Admin Logs"],
+        key="page",
     )
 
 if page == "Login":
