@@ -44,6 +44,7 @@ class Citation(BaseModel):
     filename: str
     page_number: Optional[int] = None
     quoted_text: str
+    score: float | None = None
 
 
 class RetrievedChunkOut(BaseModel):

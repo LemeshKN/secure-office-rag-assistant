@@ -6,9 +6,10 @@ from app.models import User
 
 DEFAULT_USERS = [
     {"username": "admin", "password": "admin123", "role": "admin"},
-    {"username": "manager", "password": "manager123", "role": "manager"},
-    {"username": "employee", "password": "employee123", "role": "employee"},
-    {"username": "guest", "password": "guest123", "role": "guest"},
+    {"username": "lemesh", "password": "lemesh123", "role": "agent_developer"},
+    {"username": "priya", "password": "priya123", "role": "developer"},
+    {"username": "amit", "password": "amit123", "role": "manager"},
+    {"username": "khushi", "password": "khushi123", "role": "hr"},
 ]
 
 

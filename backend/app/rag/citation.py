@@ -34,8 +34,8 @@ def build_citations(answer: str, chunks: list[RetrievedChunk], max_citations: in
             chunk_id=chunk.chunk_id,
             filename=chunk.filename,
             page_number=chunk.page_number,
-            quoted_text=shorten(chunk.text.replace("\n", " "), width=280, placeholder="..."),
-        )
+            quoted_text=shorten(chunk.text.replace("\n", " "), width=60, placeholder="..."), 
+            score=round(chunk.rerank_score or chunk.combined_score or chunk.vector_score, 4),       )
         for chunk in selected
     ]
 

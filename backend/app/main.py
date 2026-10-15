@@ -7,6 +7,7 @@ from app.api import admin_routes, auth_routes, chat_routes, document_routes, eva
 from app.auth.users import create_default_users
 from app.config import get_settings
 from app.database import SessionLocal, init_db
+from app.api import conversation_routes
 
 
 @asynccontextmanager
@@ -39,6 +40,7 @@ app.include_router(document_routes.router)
 app.include_router(chat_routes.router)
 app.include_router(evaluation_routes.router)
 app.include_router(admin_routes.router)
+app.include_router(conversation_routes.router)
 
 
 @app.get("/health")

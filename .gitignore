@@ -1,10 +1,15 @@
+.venv/
+.venv311/
+backend/.venv/
+backend/.venv311/
+frontend/.venv/
+frontend/.venv311/
+venv/
 __pycache__/
 *.py[cod]
 .pytest_cache/
 .mypy_cache/
 .ruff_cache/
-.venv/
-venv/
 .env
 *.sqlite
 *.sqlite3
@@ -16,7 +21,5 @@ data/sqlite/*
 !data/uploads/.gitkeep
 !data/chroma/.gitkeep
 !data/sqlite/.gitkeep
-# Runtime artifacts created when the backend/frontend run
 backend/data/
 .DS_Store
-

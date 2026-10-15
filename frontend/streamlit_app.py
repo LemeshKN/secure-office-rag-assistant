@@ -1,3 +1,4 @@
+import json
 import os
 from typing import Any
 
@@ -49,6 +50,7 @@ def login_page() -> None:
             st.session_state["token"] = data["access_token"]
             st.session_state["username"] = data["username"]
             st.session_state["role"] = data["role"]
+            st.session_state["user_id"] = data.get("user_id")
             st.success(f"Signed in as {data['username']} ({data['role']})")
         except Exception as exc:
             st.error(str(exc))
@@ -57,26 +59,84 @@ def login_page() -> None:
 def upload_page() -> None:
     require_login()
     st.header("Upload Documents")
+    try:
+        manager_info = request_json(
+            "GET",
+            "/auth/me/manager",
+            headers=api_headers(),
+        )
+        has_manager = manager_info.get("has_manager", False)
+    except Exception:
+        has_manager = False
+
+    try:
+        users = request_json(
+            "GET",
+            "/auth/users",
+            headers=api_headers(),
+        )
+    except Exception:
+        users = []
+
+    user_options = {
+        user["username"]: user["id"]
+        for user in users
+        if user["id"] != st.session_state.get("user_id")
+    }
+
+
     with st.form("upload-form"):
         uploaded_file = st.file_uploader("Document", type=["pdf", "docx", "txt", "md", "markdown", "csv"])
         title = st.text_input("Title")
         allowed_roles = st.multiselect(
-            "Allowed roles",
-            options=["admin", "manager", "employee", "guest"],
-            default=["employee"],
+        "Allowed roles",
+        options=["admin", "agent_developer", "developer", "hr"],
+        default=[],
+        help="Select roles only when sharing with everyone in those roles.",
         )
-        allowed_user_ids = st.text_input("Allowed user IDs (comma-separated, optional)")
+        selected_usernames = st.multiselect(
+            "Share with specific people",
+            options=list(user_options.keys()),
+            default=[],
+            help="Select individual users who should access this document.",
+        )
+        share_with_manager = False
+        if has_manager:
+            share_with_manager = st.checkbox(
+                "Share with my manager",
+                value=False,
+                help="Give your assigned manager access to this document.",
+            )
+        else:
+            st.info(
+                "You do not have an assigned manager, so manager sharing is unavailable."
+            )
         submitted = st.form_submit_button("Upload")
+
     if submitted and uploaded_file:
         files = {"file": (uploaded_file.name, uploaded_file.getvalue(), uploaded_file.type)}
+        selected_user_ids = [
+            str(user_options[username])
+            for username in selected_usernames
+        ]
         data = {
             "title": title,
             "allowed_roles": ",".join(allowed_roles),
-            "allowed_user_ids": allowed_user_ids,
+            "allowed_user_ids": ",".join(selected_user_ids),
+            "share_with_manager": str(share_with_manager).lower(),
         }
+
         try:
             result = request_json("POST", "/documents/upload", headers=api_headers(), files=files, data=data)
-            st.success(f"Uploaded {result['document']['filename']} with {result['chunks_created']} chunks")
+            if share_with_manager:
+                st.success(
+                    f"{uploaded_file.name} uploaded and shared with your manager."
+                )
+            else:
+                st.success(
+                    f"{uploaded_file.name} uploaded with {result['chunks_created']} chunks."
+                )
+
         except Exception as exc:
             st.error(str(exc))
 
@@ -91,21 +151,175 @@ def upload_page() -> None:
 def chat_page() -> None:
     require_login()
     st.header("Chat")
-    question = st.text_area("Question", height=120)
-    col_a, col_b = st.columns([1, 1])
-    top_k = col_a.slider("Top K", min_value=1, max_value=20, value=5)
-    model = col_b.text_input("Model", value="auto")
-    if st.button("Ask", type="primary") and question.strip():
+
+    username = st.session_state.get("username")
+
+    if st.session_state.get("chat_owner") != username:
+        st.session_state["chat_owner"] = username
+        st.session_state["conversation_id"] = None
+
+    try:
+        conversations = request_json(
+            "GET",
+            "/conversations",
+            headers=api_headers(),
+        )
+    except Exception as exc:
+        st.error(str(exc))
+        st.stop()
+
+    def open_conversation(conversation_id):
+        st.session_state["conversation_id"] = conversation_id
+
+    def remove_conversation(conversation_id):
         try:
-            result = request_json(
-                "POST",
-                "/chat",
+            request_json(
+                "DELETE",
+                f"/conversations/{conversation_id}",
                 headers=api_headers(),
-                json={"question": question, "top_k": top_k, "model": model},
             )
-            render_answer(result)
+        except Exception as exc:
+            st.session_state["delete_error"] = str(exc)
+            return
+
+        if st.session_state.get("conversation_id") == conversation_id:
+            st.session_state["conversation_id"] = None
+
+    with st.sidebar:
+        st.divider()
+
+        if st.button("+ New chat", use_container_width=True):
+            st.session_state["conversation_id"] = None
+            st.rerun()
+
+        st.subheader("My conversations")
+
+        if not conversations:
+            st.caption("No saved conversations yet.")
+
+        for conversation in conversations:
+            conv_id = conversation["id"]
+            title = " ".join(conversation["title"].split())
+            label = title if len(title) <= 24 else title[:23] + "..."
+
+            title_col, delete_col = st.columns([5, 1])
+
+            with title_col:
+                st.button(
+                    label,
+                    key=f"conversation_{username}_{conv_id}",
+                    help=title,
+                    use_container_width=True,
+                    on_click=open_conversation,
+                    args=(conv_id,),
+                )
+
+            with delete_col:
+                st.button(
+                    "×",
+                    key=f"delete_{username}_{conv_id}",
+                    help="Permanently delete this conversation",
+                    use_container_width=True,
+                    on_click=remove_conversation,
+                    args=(conv_id,),
+                )
+
+        delete_error = st.session_state.pop("delete_error", None)
+        if delete_error:
+            st.error(delete_error)
+
+    conversation_id = st.session_state.get("conversation_id")
+    messages = []
+
+    if conversation_id is not None:
+        try:
+            messages = request_json(
+                "GET",
+                f"/conversations/{conversation_id}/messages",
+                headers=api_headers(),
+            )
+        except Exception as exc:
+            st.session_state["conversation_id"] = None
+            st.error(str(exc))
+            st.stop()
+
+    if not messages:
+        st.caption("Ask a question about your accessible documents.")
+
+    for message in messages:
+        with st.chat_message(message["role"]):
+            st.write(message["content"])
+
+            citations = message.get("citations", [])
+            if citations:
+                with st.expander("Sources", expanded=False):
+                    for citation in citations:
+                        filename = citation.get("filename", "Unknown document")
+                        score = citation.get("score")
+                        score_text = (
+                            f" | score: {score:.3f}"
+                            if isinstance(score, (int, float))
+                            else ""
+                        )
+
+                        st.markdown(f"**{filename}**{score_text}")
+
+                        snippet = citation.get("quoted_text", "") or ""
+                        if len(snippet) > 180:
+                            snippet = snippet[:180].rstrip() + "…"
+
+                        if snippet:
+                            st.caption(snippet)
+
+    question = st.chat_input("Ask a question...")
+
+    if question and question.strip():
+        try:
+            if conversation_id is None:
+                conversation = request_json(
+                    "POST",
+                    "/conversations",
+                    headers=api_headers(),
+                )
+                conversation_id = conversation["id"]
+                st.session_state["conversation_id"] = conversation_id
+
+            with st.chat_message("user"):
+                st.write(question)
+
+            answer_box = st.empty()
+            full_answer = ""
+
+            with requests.post(
+                f"{BACKEND_URL}/conversations/{conversation_id}/messages/stream",
+                headers=api_headers(),
+                json={
+                    "question": question,
+                    "top_k": 5,
+                    "model": "auto",
+                },
+                stream=True,
+                timeout=120,
+            ) as response:
+                response.raise_for_status()
+
+                for line in response.iter_lines(decode_unicode=True):
+                    if not line or not line.startswith("data: "):
+                        continue
+
+                    payload = json.loads(line.removeprefix("data: "))
+
+                    if payload.get("type") == "token":
+                        full_answer += payload["content"]
+                        answer_box.write(full_answer)
+
+                    elif payload.get("type") == "done":
+                        break
+
         except Exception as exc:
             st.error(str(exc))
+        else:
+            st.rerun()
 
 
 def evaluation_page() -> None:
@@ -137,22 +351,39 @@ def admin_logs_page() -> None:
 def render_answer(result: dict[str, Any]) -> None:
     if result.get("warning"):
         st.warning(result["warning"])
+
     st.subheader("Answer")
     st.write(result["answer"])
-    metric_a, metric_b, metric_c = st.columns(3)
-    metric_a.metric("Evidence", result["evidence_score"])
-    metric_b.metric("Groundedness", result["groundedness_score"])
-    metric_c.metric("Latency (ms)", result["latency_ms"])
 
-    with st.expander("Citations", expanded=True):
-        for citation in result.get("citations", []):
-            st.markdown(f"**{citation['filename']}** | page {citation.get('page_number') or 'n/a'}")
-            st.caption(f"doc {citation['document_id']} | chunk {citation['chunk_id']}")
-            st.write(citation["quoted_text"])
+    citations = result.get("citations", [])
+    if citations:
+        with st.expander("Sources", expanded=False):
+            for citation in result.get("citations", []):
+                filename = citation.get("filename", "Unknown document")
+                score = citation.get("score")
+                score_text = f" | score: {score:.3f}" if isinstance(score, (int, float)) else ""
 
-    with st.expander("Retrieved chunks"):
-        st.dataframe(result.get("retrieved_chunks", []), use_container_width=True)
+                st.markdown(f"**{filename}**{score_text}")
 
+                snippet = citation.get("quoted_text", "") or ""
+                if len(snippet) > 180:
+                    snippet = snippet[:180].rstrip() + "…"
+
+                if snippet:
+                    st.caption(snippet)
+
+    if st.session_state.get("role") == "admin":
+        with st.expander("Debug details", expanded=False):
+            metric_a, metric_b, metric_c = st.columns(3)
+            metric_a.metric("Evidence", result["evidence_score"])
+            metric_b.metric("Groundedness", result["groundedness_score"])
+            metric_c.metric("Latency (ms)", result["latency_ms"])
+
+            st.caption("Retrieved chunks")
+            st.dataframe(
+                result.get("retrieved_chunks", []),
+                use_container_width=True,
+            )
 
 def require_login() -> None:
     if not st.session_state.get("token"):

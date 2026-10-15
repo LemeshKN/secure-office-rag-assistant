@@ -6,7 +6,7 @@ from sqlalchemy.orm import Session
 from app.models import Document, User
 
 
-ROLES = ("admin", "manager", "employee", "guest")
+ROLES = ("admin", "agent_developer", "developer", "manager", "hr")
 
 
 def normalize_roles(roles: Iterable[str] | None) -> list[str]:
@@ -52,8 +52,6 @@ def document_user_ids(document: Document) -> list[int]:
 
 
 def can_access_document(user: User, document: Document) -> bool:
-    if user.role == "admin":
-        return True
     if document.owner_user_id == user.id:
         return True
     if user.role in document_roles(document):
@@ -62,17 +60,17 @@ def can_access_document(user: User, document: Document) -> bool:
 
 
 def accessible_document_ids(db: Session, user: User) -> list[int]:
-    if user.role == "admin":
-        return [doc_id for (doc_id,) in db.query(Document.id).all()]
     documents = db.query(Document).all()
-    return [document.id for document in documents if can_access_document(user, document)]
+    return [
+        document.id
+        for document in documents
+        if can_access_document(user, document)
+    ]
 
 
-def build_chroma_permission_filter(user: User) -> dict | None:
-    """Build a Chroma metadata filter that excludes unauthorized chunks early."""
 
-    if user.role == "admin":
-        return None
+def build_chroma_permission_filter(user: User) -> dict:
+    """Restrict retrieval to owned or explicitly shared documents."""
     return {
         "$or": [
             {"owner_user_id": user.id},

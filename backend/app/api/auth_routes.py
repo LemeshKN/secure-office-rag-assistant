@@ -9,7 +9,7 @@ from app.auth.security import create_access_token, get_current_user
 from app.auth.users import authenticate_user
 from app.config import get_settings
 from app.database import get_db
-from app.models import User
+from app.models import ReportingRelationship, User
 from app.schemas import Token, UserOut
 
 
@@ -40,3 +40,42 @@ def login(
 def me(current_user: Annotated[User, Depends(get_current_user)]) -> User:
     return current_user
 
+
+@router.get("/me/manager")
+def get_my_manager(
+    current_user: Annotated[User, Depends(get_current_user)],
+    db: Annotated[Session, Depends(get_db)],
+):
+    manager = (
+        db.query(User)
+        .join(
+            ReportingRelationship,
+            ReportingRelationship.manager_user_id == User.id,
+        )
+        .filter(ReportingRelationship.employee_user_id == current_user.id)
+        .first()
+    )
+
+    if manager is None:
+        return {"has_manager": False, "manager_username": None}
+
+    return {
+        "has_manager": True,
+        "manager_username": manager.username,
+    }
+
+@router.get("/users")
+def list_users(
+    current_user: Annotated[User, Depends(get_current_user)],
+    db: Annotated[Session, Depends(get_db)],
+):
+    users = db.query(User).order_by(User.username).all()
+
+    return [
+        {
+            "id": user.id,
+            "username": user.username,
+            "role": user.role,
+        }
+        for user in users
+    ]

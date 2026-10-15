@@ -70,3 +70,69 @@ class QueryLog(Base):
 
     user = relationship("User", back_populates="query_logs")
 
+
+class Conversation(Base):
+    __tablename__ = "conversations"
+
+    id: Mapped[int] = mapped_column(
+        Integer, primary_key=True, index=True
+    )
+    user_id: Mapped[int] = mapped_column(
+        ForeignKey("users.id"), nullable=False, index=True
+    )
+    title: Mapped[str] = mapped_column(
+        String(200), default="New chat", nullable=False
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime, default=datetime.utcnow, nullable=False
+    )
+
+    messages = relationship(
+        "ChatMessage",
+        back_populates="conversation",
+        cascade="all, delete-orphan",
+        order_by="ChatMessage.id",
+    )
+
+
+class ChatMessage(Base):
+    __tablename__ = "chat_messages"
+
+    id: Mapped[int] = mapped_column(
+        Integer, primary_key=True, index=True
+    )
+    conversation_id: Mapped[int] = mapped_column(
+        ForeignKey("conversations.id"), nullable=False, index=True
+    )
+    role: Mapped[str] = mapped_column(
+        String(20), nullable=False
+    )
+    content: Mapped[str] = mapped_column(
+        Text, nullable=False
+    )
+    citations_json: Mapped[str] = mapped_column(
+        Text, default="[]", nullable=False
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime, default=datetime.utcnow, nullable=False
+    )
+
+    conversation = relationship(
+        "Conversation", back_populates="messages"
+    )
+
+
+class ReportingRelationship(Base):
+    __tablename__ = "reporting_relationships"
+
+    employee_user_id: Mapped[int] = mapped_column(
+        ForeignKey("users.id"),
+        primary_key=True,
+    )
+    manager_user_id: Mapped[int] = mapped_column(
+        ForeignKey("users.id"),
+        nullable=False,
+        index=True,
+    )
+
+    

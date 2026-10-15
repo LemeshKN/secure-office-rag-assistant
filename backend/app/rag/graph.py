@@ -133,8 +133,12 @@ class RAGWorkflow:
         }
 
     def finalize_response(self, state: RAGState) -> RAGState:
+        if not state.get("should_answer", False):
+            return {**state, "citations": []}
+
         if "citations" in state:
             return state
+
         chunks = state.get("reranked_chunks", [])
         citations = build_citations(state.get("answer", ""), chunks)
         return {**state, "citations": citations}
