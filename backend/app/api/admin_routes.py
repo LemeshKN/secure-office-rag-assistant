@@ -20,7 +20,6 @@ def list_logs(
 ) -> list[QueryLog]:
     return (
         db.query(QueryLog)
-        .filter(QueryLog.user_id == current_user.id)
         .order_by(QueryLog.created_at.desc(), QueryLog.id.desc())
         .limit(limit)
         .all()
