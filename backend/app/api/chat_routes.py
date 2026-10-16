@@ -88,30 +88,40 @@ def stream_message(
         request.model,
     )
 
+    answer_text = response.answer
+    conversation_id_value = conversation.id
+
+    has_messages = (
+        db.query(ChatMessage.id)
+        .filter(ChatMessage.conversation_id == conversation_id_value)
+        .first()
+    )
+    if has_messages is None:
+        conversation.title = request.question.strip()[:200] or "New chat"
+
+    log_query(db, current_user, request.question, response)
+
+    user_message = ChatMessage(
+        conversation_id=conversation_id_value,
+        role="user",
+        content=request.question,
+        citations_json="[]",
+    )
+    db.add(user_message)
+
+    assistant_message = ChatMessage(
+        conversation_id=conversation_id_value,
+        role="assistant",
+        content=answer_text,
+        citations_json=json.dumps(
+            [citation.model_dump(mode="json") for citation in response.citations]
+        ),
+    )
+    db.add(assistant_message)
+    db.commit()
+
     def save_and_stream() -> Generator[str, None, None]:
-        user_message = ChatMessage(
-            conversation_id=conversation.id,
-            role="user",
-            content=request.question,
-            citations_json="[]",
-        )
-        db.add(user_message)
-
-        assistant_message = ChatMessage(
-            conversation_id=conversation.id,
-            role="assistant",
-            content=response.answer,
-            citations_json=json.dumps(
-                [
-                    citation.model_dump(mode="json")
-                    for citation in response.citations
-                ]
-            ),
-        )
-        db.add(assistant_message)
-        db.commit()
-
-        words = response.answer.split()
+        words = answer_text.split()
 
         for index, word in enumerate(words):
             content = word if index == 0 else f" {word}"
