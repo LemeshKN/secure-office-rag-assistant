@@ -302,14 +302,30 @@ RETRY_STATUS_CODES = (502, 503)
 RETRY_WAITS_SECONDS = (3, 6, 12, 20)
 
 
-def backend_request(method: str, path: str, **kwargs: Any) -> requests.Response:
+class BackendError(RuntimeError):
+    """A backend failure with a message that is safe to show to the user."""
+
+
+def sign_out(message: str | None = None) -> None:
+    st.session_state.clear()
+    if message:
+        st.session_state["flash"] = message
+    st.rerun()
+
+
+def backend_request(method: str, path: str, retry: bool = True, **kwargs: Any) -> requests.Response:
     url = f"{BACKEND_URL}{path}"
-    for wait in (*RETRY_WAITS_SECONDS, None):
+    waits = (*RETRY_WAITS_SECONDS, None) if retry else (None,)
+    for wait in waits:
         try:
             response = backend_session().request(method, url, timeout=120, **kwargs)
+        except requests.ReadTimeout:
+            raise BackendError("The backend took too long to respond. Please try again.")
         except requests.ConnectionError:
             if wait is None:
-                raise RuntimeError("Could not connect to the backend. Please try again in a minute.")
+                raise BackendError("Could not connect to the backend. Please try again in a minute.")
+        except requests.RequestException as exc:
+            raise BackendError(f"Request to the backend failed: {exc.__class__.__name__}")
         else:
             if response.status_code not in RETRY_STATUS_CODES or wait is None:
                 return response
@@ -317,21 +333,40 @@ def backend_request(method: str, path: str, **kwargs: Any) -> requests.Response:
     raise AssertionError("unreachable")
 
 
+def error_message(response: requests.Response) -> str:
+    if response.status_code in (502, 503, 504):
+        return (
+            f"Backend is unavailable (HTTP {response.status_code}). "
+            "It may be starting up; please try again in a minute."
+        )
+    try:
+        body = response.json()
+    except ValueError:
+        body = None
+    detail = body.get("detail") if isinstance(body, dict) else None
+    if isinstance(detail, list):  # FastAPI validation errors
+        detail = "; ".join(
+            str(item.get("msg", item)) if isinstance(item, dict) else str(item) for item in detail
+        )
+    return str(detail) if detail else f"Request failed (HTTP {response.status_code})."
+
+
+def check_response(response: requests.Response, path: str) -> None:
+    if response.status_code == 401 and path != "/auth/login" and st.session_state.get("token"):
+        message = "Your session has expired. Please sign in again."
+        sign_out(message)
+        raise BackendError(message)  # st.rerun() is a no-op inside widget callbacks
+    if response.status_code >= 400:
+        raise BackendError(error_message(response))
+
+
 def request_json(method: str, path: str, **kwargs: Any) -> Any:
     response = backend_request(method, path, **kwargs)
-    if response.status_code in (502, 503, 504):
-        raise RuntimeError(
-            f"Backend is unavailable (HTTP {response.status_code}). "
-            "It may be starting up or have crashed; try again in a minute."
-        )
-    if response.status_code >= 400:
-        detail = response.text
-        try:
-            detail = response.json().get("detail", detail)
-        except Exception:
-            pass
-        raise RuntimeError(detail)
-    return response.json()
+    check_response(response, path)
+    try:
+        return response.json()
+    except ValueError:
+        raise BackendError("The backend returned an unexpected response. Please try again.")
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -346,26 +381,38 @@ def login_page() -> None:
         st.markdown("## Enterprise RAG Platform")
         st.caption("Sign in to access your secure workspace")
 
+        flash = st.session_state.pop("flash", None)
+        if flash:
+            st.warning(flash)
+
         with st.form("login-form"):
             username = st.text_input("Username", value="admin")
             password = st.text_input("Password", type="password", value="admin123")
             submitted = st.form_submit_button("Sign in", use_container_width=True)
 
         if submitted:
+            if not username.strip() or not password:
+                st.error("Please enter both username and password.")
+                return
             try:
-                data = request_json(
-                    "POST",
-                    "/auth/login",
-                    data={"username": username, "password": password},
-                )
-                st.session_state["token"] = data["access_token"]
-                st.session_state["username"] = data["username"]
-                st.session_state["role"] = data["role"]
-                st.session_state["user_id"] = data.get("user_id")
-                st.session_state["page"] = "Chat"
-                st.rerun()
-            except Exception as exc:
+                with st.spinner("Signing in..."):
+                    data = request_json(
+                        "POST",
+                        "/auth/login",
+                        data={"username": username.strip(), "password": password},
+                    )
+                token = data["access_token"]
+            except BackendError as exc:
                 st.error(str(exc))
+                return
+            except (KeyError, TypeError):
+                st.error("The backend returned an unexpected login response. Please try again.")
+                return
+            st.session_state["token"] = token
+            st.session_state["username"] = data.get("username", username.strip())
+            st.session_state["role"] = data.get("role", "")
+            st.session_state["user_id"] = data.get("user_id")
+            st.rerun()
 
 
 def upload_page() -> None:
@@ -613,8 +660,12 @@ def chat_page() -> None:
             answer_box = st.empty()
             full_answer = ""
 
-            with requests.post(
-                f"{BACKEND_URL}/conversations/{conversation_id}/messages/stream",
+            stream_path = f"/conversations/{conversation_id}/messages/stream"
+            # No retry: the backend saves the message before streaming, so a retry could duplicate it.
+            response = backend_request(
+                "POST",
+                stream_path,
+                retry=False,
                 headers=api_headers(),
                 json={
                     "question": question,
@@ -622,25 +673,30 @@ def chat_page() -> None:
                     "model": "auto",
                 },
                 stream=True,
-                timeout=120,
-            ) as response:
-                response.raise_for_status()
+            )
+            with response:
+                check_response(response, stream_path)
 
                 for line in response.iter_lines(decode_unicode=True):
                     if not line or not line.startswith("data: "):
                         continue
 
-                    payload = json.loads(line.removeprefix("data: "))
+                    try:
+                        payload = json.loads(line.removeprefix("data: "))
+                    except ValueError:
+                        continue
 
                     if payload.get("type") == "token":
-                        full_answer += payload["content"]
+                        full_answer += payload.get("content", "")
                         answer_box.write(full_answer)
 
                     elif payload.get("type") == "done":
                         break
 
-        except Exception as exc:
+        except BackendError as exc:
             st.error(str(exc))
+        except requests.RequestException:
+            st.error("Connection to the backend was lost while receiving the answer. Please refresh the chat.")
         else:
             st.rerun()
 
@@ -665,8 +721,14 @@ def evaluation_page() -> None:
         )
         run_btn = st.button("Run evaluation", type="primary", use_container_width=True)
 
-    if run_btn and question.strip():
-        doc_ids = [int(item.strip()) for item in expected_doc_ids.split(",") if item.strip()]
+    if run_btn and not question.strip():
+        st.warning("Please enter a question to evaluate.")
+    elif run_btn:
+        try:
+            doc_ids = [int(item.strip()) for item in expected_doc_ids.split(",") if item.strip()]
+        except ValueError:
+            st.error("Expected document IDs must be comma-separated numbers, e.g. 1, 2, 5.")
+            return
         payload = {"question": question, "expected_doc_ids": doc_ids or None}
         try:
             result = request_json("POST", "/evaluate/query", headers=api_headers(), json=payload)
@@ -740,30 +802,32 @@ def require_login() -> None:
 # Sidebar Navigation
 # ─────────────────────────────────────────────────────────────────────────────
 
+PAGE_LABELS = {
+    "Chat": "Chat",
+    "Upload Documents": "Documents",
+    "Evaluation": "Evaluation",
+    "Admin Logs": "Admin Logs",
+}
+
 with st.sidebar:
     st.markdown("### Enterprise RAG")
 
+    # Signed-out users only see the login page; signed-in users never see it.
     if st.session_state.get("token"):
         username = st.session_state.get("username", "")
         role = st.session_state.get("role", "")
         st.caption(f"{username} / {role}")
         if st.button("Sign out", use_container_width=True):
-            st.session_state.clear()
-            st.session_state["page"] = "Login"
-            st.rerun()
+            sign_out()
 
-    page = st.radio(
-        "Navigation",
-        ["Login", "Upload Documents", "Chat", "Evaluation", "Admin Logs"],
-        key="page",
-        format_func=lambda x: {
-            "Login": "Sign In",
-            "Upload Documents": "Documents",
-            "Chat": "Chat",
-            "Evaluation": "Evaluation",
-            "Admin Logs": "Admin Logs",
-        }.get(x, x),
-    )
+        page = st.radio(
+            "Navigation",
+            list(PAGE_LABELS),
+            key="nav_page",
+            format_func=PAGE_LABELS.get,
+        )
+    else:
+        page = "Login"
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Page Router

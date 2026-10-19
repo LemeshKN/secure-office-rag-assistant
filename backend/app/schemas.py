@@ -9,6 +9,7 @@ class Token(BaseModel):
     token_type: str = "bearer"
     username: str
     role: str
+    user_id: Optional[int] = None
 
 
 class UserOut(BaseModel):

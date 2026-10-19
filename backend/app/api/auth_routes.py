@@ -33,7 +33,7 @@ def login(
         data={"sub": user.username, "user_id": user.id, "role": user.role},
         expires_delta=timedelta(minutes=settings.access_token_expire_minutes),
     )
-    return Token(access_token=token, username=user.username, role=user.role)
+    return Token(access_token=token, username=user.username, role=user.role, user_id=user.id)
 
 
 @router.get("/me", response_model=UserOut)
