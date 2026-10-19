@@ -1,0 +1,29 @@
+name: Keep Render Alive
+
+on:
+  schedule:
+    # Runs every 10 minutes (Render free services sleep after 15 minutes idle)
+    - cron: "*/10 * * * *"
+  workflow_dispatch:
+
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    env:
+      # Set these in GitHub: Settings -> Secrets and variables -> Actions -> Variables
+      FRONTEND_URL: ${{ vars.FRONTEND_URL || 'https://rag-frontend-fz8s.onrender.com' }}
+      BACKEND_URL: ${{ vars.BACKEND_URL }}
+    steps:
+      - name: Ping backend
+        run: |
+          if [ -z "$BACKEND_URL" ]; then
+            echo "::warning::BACKEND_URL repository variable is not set; skipping backend ping"
+            exit 0
+          fi
+          curl -s -o /dev/null -m 120 --retry 3 --retry-delay 10 --retry-all-errors \
+            -w "Backend: %{http_code}\n" "${BACKEND_URL%/}/health" || true
+
+      - name: Ping frontend
+        run: |
+          curl -s -o /dev/null -m 120 --retry 3 --retry-delay 10 --retry-all-errors \
+            -w "Frontend: %{http_code}\n" "${FRONTEND_URL%/}/" || true

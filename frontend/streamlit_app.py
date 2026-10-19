@@ -1,5 +1,6 @@
 import json
 import os
+import time
 from typing import Any
 
 import requests
@@ -295,8 +296,34 @@ def backend_session() -> requests.Session:
     return requests.Session()
 
 
+# Render returns 502/503 while the backend is waking up or restarting,
+# so retry a few times before reporting the backend as unavailable.
+RETRY_STATUS_CODES = (502, 503)
+RETRY_WAITS_SECONDS = (3, 6, 12, 20)
+
+
+def backend_request(method: str, path: str, **kwargs: Any) -> requests.Response:
+    url = f"{BACKEND_URL}{path}"
+    for wait in (*RETRY_WAITS_SECONDS, None):
+        try:
+            response = backend_session().request(method, url, timeout=120, **kwargs)
+        except requests.ConnectionError:
+            if wait is None:
+                raise RuntimeError("Could not connect to the backend. Please try again in a minute.")
+        else:
+            if response.status_code not in RETRY_STATUS_CODES or wait is None:
+                return response
+        time.sleep(wait)
+    raise AssertionError("unreachable")
+
+
 def request_json(method: str, path: str, **kwargs: Any) -> Any:
-    response = backend_session().request(method, f"{BACKEND_URL}{path}", timeout=120, **kwargs)
+    response = backend_request(method, path, **kwargs)
+    if response.status_code in (502, 503, 504):
+        raise RuntimeError(
+            f"Backend is unavailable (HTTP {response.status_code}). "
+            "It may be starting up or have crashed; try again in a minute."
+        )
     if response.status_code >= 400:
         detail = response.text
         try:
