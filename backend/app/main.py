@@ -3,11 +3,12 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.api import admin_routes, auth_routes, chat_routes, document_routes, evaluation_routes
+from app.api import admin_routes, auth_routes, chat_routes, cost_routes, document_routes, evaluation_routes
 from app.auth.users import create_default_users
 from app.config import get_settings
 from app.database import SessionLocal, init_db
 from app.api import conversation_routes
+from app.cost.seed import seed_cost_data
 
 
 @asynccontextmanager
@@ -18,6 +19,7 @@ async def lifespan(app: FastAPI):
     db = SessionLocal()
     try:
         create_default_users(db)
+        seed_cost_data(db)
     finally:
         db.close()
     yield
@@ -41,6 +43,7 @@ app.include_router(chat_routes.router)
 app.include_router(evaluation_routes.router)
 app.include_router(admin_routes.router)
 app.include_router(conversation_routes.router)
+app.include_router(cost_routes.router)
 
 
 @app.get("/health")
