@@ -5,8 +5,7 @@ from dataclasses import dataclass
 import requests
 
 from app.config import Settings, get_settings
-from app.rag.citation import format_context
-from app.rag.prompts import SYSTEM_PROMPT, build_user_prompt
+from app.rag.prompt_builder import build_prompt_parts
 from app.retrieval.hybrid_retriever import RetrievedChunk
 from app.retrieval.keyword_store import tokenize
 
@@ -55,12 +54,12 @@ class OpenAICompatibleClient(LLMClient):
         self.client = OpenAI(api_key=settings.openai_api_key, base_url=settings.openai_base_url or None)
 
     def generate(self, question: str, chunks: list[RetrievedChunk]) -> LLMResult:
-        context = format_context(chunks)
+        system_text, user_text = build_prompt_parts(question, chunks)
         response = self.client.chat.completions.create(
             model=self.model_name,
             messages=[
-                {"role": "system", "content": SYSTEM_PROMPT},
-                {"role": "user", "content": build_user_prompt(context, question)},
+                {"role": "system", "content": system_text},
+                {"role": "user", "content": user_text},
             ],
             temperature=0.1,
         )
@@ -75,7 +74,8 @@ class OllamaClient(LLMClient):
         self.model_name = model_name or settings.ollama_model
 
     def generate(self, question: str, chunks: list[RetrievedChunk]) -> LLMResult:
-        prompt = SYSTEM_PROMPT + "\n\n" + build_user_prompt(format_context(chunks), question)
+        system_text, user_text = build_prompt_parts(question, chunks)
+        prompt = system_text + "\n\n" + user_text
         response = requests.post(
             f"{self.settings.ollama_base_url}/api/generate",
             json={"model": self.model_name, "prompt": prompt, "stream": False},
@@ -83,7 +83,6 @@ class OllamaClient(LLMClient):
         )
         response.raise_for_status()
         return LLMResult(response.json().get("response", ""), f"ollama/{self.model_name}", 0.0)
-
 
 class AnthropicClient(LLMClient):
     def __init__(self, settings: Settings, model_name: str | None = None) -> None:
@@ -94,10 +93,11 @@ class AnthropicClient(LLMClient):
         self.client = anthropic.Anthropic(api_key=settings.anthropic_api_key)
 
     def generate(self, question: str, chunks: list[RetrievedChunk]) -> LLMResult:
+        system_text, user_text = build_prompt_parts(question, chunks)
         response = self.client.messages.create(
             model=self.model_name,
-            system=SYSTEM_PROMPT,
-            messages=[{"role": "user", "content": build_user_prompt(format_context(chunks), question)}],
+            system=system_text,
+            messages=[{"role": "user", "content": user_text}],
             max_tokens=800,
             temperature=0.1,
         )
@@ -112,12 +112,13 @@ class GeminiClient(LLMClient):
         self.settings = settings
         self.model_name = model_name or settings.gemini_model
         genai.configure(api_key=settings.gemini_api_key)
-        self.model = genai.GenerativeModel(self.model_name, system_instruction=SYSTEM_PROMPT)
+        system_text, _ = build_prompt_parts("", [])
+        self.model = genai.GenerativeModel(self.model_name, system_instruction=system_text)
 
     def generate(self, question: str, chunks: list[RetrievedChunk]) -> LLMResult:
-        response = self.model.generate_content(build_user_prompt(format_context(chunks), question))
+        _, user_text = build_prompt_parts(question, chunks)
+        response = self.model.generate_content(user_text)
         return LLMResult(getattr(response, "text", ""), f"gemini/{self.model_name}", 0.0)
-
 
 def get_llm_client(model: str = "auto", settings: Settings | None = None) -> LLMClient:
     settings = settings or get_settings()

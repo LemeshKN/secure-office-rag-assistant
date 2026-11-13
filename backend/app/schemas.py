@@ -112,3 +112,21 @@ class QueryLogOut(BaseModel):
 class ErrorResponse(BaseModel):
     detail: str | dict[str, Any]
 
+class EstimateRequest(BaseModel):
+    question: str = Field(min_length=1)
+    top_k: int = Field(default=5, ge=1, le=20)
+    model: str = "auto"
+    project_id: Optional[int] = None
+    max_output_tokens: Optional[int] = Field(default=None, gt=0, le=4000)
+
+
+class EstimateResponse(BaseModel):
+    model: str
+    priced_as: str
+    input_tokens: int
+    output_tokens: int
+    estimated_cost: float
+    will_call_llm: bool
+    evidence_score: float
+    top_k: int
+    retrieved_chunk_ids: list[int]

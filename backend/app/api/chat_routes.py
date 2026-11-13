@@ -8,17 +8,10 @@ from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 
 from app.auth.security import get_current_user
-from app.config import get_settings
 from app.database import get_db
-from app.ingestion.embeddings import get_embedding_provider
 from app.logging_utils.query_logger import log_query
 from app.models import ChatMessage, Conversation, User
-from app.rag.graph import RAGWorkflow
-from app.rag.llm_client import get_llm_client
-from app.retrieval.hybrid_retriever import HybridRetriever
-from app.retrieval.keyword_store import KeywordStore
-from app.retrieval.reranker import Reranker
-from app.retrieval.vector_store import ChromaVectorStore
+from app.rag.workflow_factory import build_workflow
 from app.schemas import ChatRequest, ChatResponse
 
 router = APIRouter(tags=["chat"])
@@ -42,20 +35,8 @@ def run_rag_request(
     top_k: int = 5,
     model: str = "auto",
 ) -> ChatResponse:
-    settings = get_settings()
-    embeddings = get_embedding_provider(settings)
-    vector_store = ChromaVectorStore(settings)
-    retriever = HybridRetriever(embeddings, vector_store, KeywordStore())
-    workflow = RAGWorkflow(
-        db=db,
-        user=user,
-        retriever=retriever,
-        reranker=Reranker(settings),
-        llm_client=get_llm_client(model, settings),
-        settings=settings,
-    )
+    workflow = build_workflow(db, user, model)
     return workflow.run(question, top_k)
-
 
 
 @router.post("/conversations/{conversation_id}/messages/stream")

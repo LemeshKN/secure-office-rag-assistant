@@ -7,6 +7,8 @@ from app.auth.security import get_current_user
 from app.cost.budgets import find_budget
 from app.database import get_db
 from app.models import Budget, Project, ProjectMember, User, UserProfile
+from app.cost.estimate import estimate_request
+from app.schemas import EstimateRequest, EstimateResponse
 
 
 router = APIRouter(prefix="/cost", tags=["cost"])
@@ -55,3 +57,19 @@ def my_cost_profile(
             for project in projects
         ],
     }
+
+@router.post("/estimate", response_model=EstimateResponse)
+def estimate(
+    request: EstimateRequest,
+    current_user: Annotated[User, Depends(get_current_user)],
+    db: Annotated[Session, Depends(get_db)],
+) -> dict:
+    # project_id is accepted but not checked until Level 4.
+    return estimate_request(
+        db,
+        current_user,
+        request.question,
+        request.top_k,
+        request.model,
+        request.max_output_tokens,
+    )
