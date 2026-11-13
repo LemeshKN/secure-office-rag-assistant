@@ -1,6 +1,6 @@
 from datetime import datetime
 
-from sqlalchemy import DateTime, Float, ForeignKey, Integer, String, Text
+from sqlalchemy import DateTime, Float, ForeignKey, Integer, String, Text, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.database import Base
@@ -134,5 +134,66 @@ class ReportingRelationship(Base):
         nullable=False,
         index=True,
     )
+
+class UserProfile(Base):
+    __tablename__ = "user_profiles"
+
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), primary_key=True)
+    department: Mapped[str] = mapped_column(String(80), index=True, nullable=False)
+
+
+class Project(Base):
+    __tablename__ = "projects"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
+    name: Mapped[str] = mapped_column(String(120), unique=True, nullable=False)
+    department: Mapped[str] = mapped_column(String(80), index=True, nullable=False)
+
+
+class ProjectMember(Base):
+    __tablename__ = "project_members"
+
+    project_id: Mapped[int] = mapped_column(ForeignKey("projects.id"), primary_key=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), primary_key=True)
+
+
+class Budget(Base):
+    __tablename__ = "budgets"
+    __table_args__ = (UniqueConstraint("scope_type", "scope_key", name="uq_budget_scope"),)
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
+    scope_type: Mapped[str] = mapped_column(String(20), index=True, nullable=False)  # user, department, project
+    scope_key: Mapped[str] = mapped_column(String(120), index=True, nullable=False)
+    budget_amount: Mapped[float] = mapped_column(Float, nullable=False)
+    period: Mapped[str] = mapped_column(String(20), default="monthly", nullable=False)
+    period_start: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, nullable=False)
+    amount_used: Mapped[float] = mapped_column(Float, default=0.0, nullable=False)
+    status: Mapped[str] = mapped_column(String(20), default="active", nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, nullable=False)
+
+    @property
+    def remaining_amount(self) -> float:
+        return max(self.budget_amount - self.amount_used, 0.0)
+
+
+class LLMUsage(Base):
+    __tablename__ = "llm_usage"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), nullable=False, index=True)
+    department: Mapped[str] = mapped_column(String(80), default="unassigned", index=True, nullable=False)
+    project_id: Mapped[int | None] = mapped_column(ForeignKey("projects.id"), nullable=True, index=True)
+    conversation_id: Mapped[int | None] = mapped_column(Integer, nullable=True, index=True)
+    query_log_id: Mapped[int | None] = mapped_column(Integer, nullable=True, index=True)
+    model_name: Mapped[str] = mapped_column(String(120), index=True, nullable=False)
+    model_name: Mapped[str] = mapped_column(String(120), index=True, nullable=False)
+    input_tokens: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    output_tokens: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    latency_ms: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    estimated_cost: Mapped[float] = mapped_column(Float, default=0.0, nullable=False)
+    actual_cost: Mapped[float] = mapped_column(Float, default=0.0, nullable=False)
+    cost_difference: Mapped[float] = mapped_column(Float, default=0.0, nullable=False)  # actual minus estimated
+    retrieved_chunk_ids: Mapped[str] = mapped_column(Text, default="[]", nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, index=True, nullable=False)
 
     
