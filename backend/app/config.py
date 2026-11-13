@@ -46,6 +46,7 @@ class Settings(BaseSettings):
     enable_cross_encoder: bool = False
     evidence_threshold: float = 0.45
     max_output_tokens: int = 800
+    warn_threshold: float = 0.50
 
     cors_origins: str = "*"
 

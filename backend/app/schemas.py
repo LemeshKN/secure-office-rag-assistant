@@ -119,6 +119,10 @@ class EstimateRequest(BaseModel):
     project_id: Optional[int] = None
     max_output_tokens: Optional[int] = Field(default=None, gt=0, le=4000)
 
+class BudgetSummary(BaseModel):
+    scope: str
+    budget_amount: float
+    remaining_amount: float
 
 class EstimateResponse(BaseModel):
     model: str
@@ -130,3 +134,9 @@ class EstimateResponse(BaseModel):
     evidence_score: float
     top_k: int
     retrieved_chunk_ids: list[int]
+    decision: str = "allow"
+    reason: str = ""
+    limiting_scope: str | None = None
+    lowest_remaining: float | None = None
+    budget_share: float | None = None
+    budgets: list[BudgetSummary] = []
