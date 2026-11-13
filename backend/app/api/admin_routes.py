@@ -3,7 +3,7 @@ from typing import Annotated
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy.orm import Session
 
-from app.auth.security import get_current_user
+from app.auth.security import require_admin
 from app.database import get_db
 from app.models import QueryLog, User
 from app.schemas import QueryLogOut
@@ -14,7 +14,7 @@ router = APIRouter(tags=["logs"])
 
 @router.get("/logs", response_model=list[QueryLogOut])
 def list_logs(
-    current_user: Annotated[User, Depends(get_current_user)],
+    current_user: Annotated[User, Depends(require_admin)],
     db: Annotated[Session, Depends(get_db)],
     limit: Annotated[int, Query(ge=1, le=100)] = 100,
 ) -> list[QueryLog]:

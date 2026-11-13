@@ -52,6 +52,8 @@ def document_user_ids(document: Document) -> list[int]:
 
 
 def can_access_document(user: User, document: Document) -> bool:
+    if user.role == "admin":
+        return True
     if document.owner_user_id == user.id:
         return True
     if user.role in document_roles(document):
@@ -70,7 +72,12 @@ def accessible_document_ids(db: Session, user: User) -> list[int]:
 
 
 def build_chroma_permission_filter(user: User) -> dict:
-    """Restrict retrieval to owned or explicitly shared documents."""
+    """Restrict retrieval to owned or explicitly shared documents.
+
+    Admin gets an empty filter, which means no restriction.
+    """
+    if user.role == "admin":
+        return {}
     return {
         "$or": [
             {"owner_user_id": user.id},
@@ -78,7 +85,6 @@ def build_chroma_permission_filter(user: User) -> dict:
             {f"user_{user.id}": 1},
         ]
     }
-
 
 def access_metadata(
     document_id: int,
