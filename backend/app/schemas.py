@@ -119,6 +119,10 @@ class QueryLogOut(BaseModel):
     groundedness_score: float
     evidence_score: float
     created_at: datetime
+    input_tokens: Optional[int] = None
+    output_tokens: Optional[int] = None
+    actual_cost: Optional[float] = None
+    cost_difference: Optional[float] = None
 
 
 class ErrorResponse(BaseModel):
