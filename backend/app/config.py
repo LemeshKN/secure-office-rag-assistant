@@ -47,6 +47,11 @@ class Settings(BaseSettings):
     evidence_threshold: float = 0.45
     max_output_tokens: int = 800
     warn_threshold: float = 0.50
+    large_context_tokens: int = 3000
+    recommended_top_k: int = 3
+    short_output_tokens: int = 300
+    near_budget_ratio: float = 0.20
+    repeat_window_days: int = 7
 
     cors_origins: str = "*"
 

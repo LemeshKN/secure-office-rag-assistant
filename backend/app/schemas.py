@@ -124,6 +124,11 @@ class BudgetSummary(BaseModel):
     budget_amount: float
     remaining_amount: float
 
+class Recommendation(BaseModel):
+    rule: str
+    message: str
+    suggested: dict[str, int | str] = {}
+
 class EstimateResponse(BaseModel):
     model: str
     priced_as: str
@@ -140,3 +145,4 @@ class EstimateResponse(BaseModel):
     lowest_remaining: float | None = None
     budget_share: float | None = None
     budgets: list[BudgetSummary] = []
+    recommendations: list[Recommendation] = []

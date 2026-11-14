@@ -10,7 +10,7 @@ from app.cost.policy import evaluate_policy
 from app.database import get_db
 from app.models import Budget, Project, ProjectMember, User, UserProfile
 from app.schemas import EstimateRequest, EstimateResponse
-
+from app.cost.recommendations import build_recommendations, apply_recommend_decision
 
 router = APIRouter(prefix="/cost", tags=["cost"])
 
@@ -92,4 +92,6 @@ def estimate(
         result["will_call_llm"],
         request.project_id,
     )
-    return {**result, **policy}
+    recs = build_recommendations(db, current_user, request.question, result, policy)
+    policy = apply_recommend_decision(policy, recs)
+    return {**result, **policy, "recommendations": recs}
