@@ -647,7 +647,7 @@ def render_card(box, pending: dict) -> str | None:
                 st.warning(f"Warning. {plain(reason)}")
             else:
                 st.info(plain(reason))
-                
+
             c1, c2, c3, c4 = st.columns(4)
             c1.metric("Estimated cost", money(card.get("estimated_cost")))
             c2.metric("Input tokens", card.get("input_tokens", 0))
@@ -1006,6 +1006,65 @@ def cost_dashboard_page() -> None:
         st.markdown("### Top expensive conversations")
         st.dataframe(pd.DataFrame(top_conversations), use_container_width=True, hide_index=True)
 
+def seat_page() -> None:
+    require_login()
+    require_admin_role()
+    st.markdown("# Seat Utilization")
+    st.caption("Demo data only. Upload a CSV of AI seats to find unused and low-use seats.")
+
+    try:
+        path = "/cost/admin/seats/sample"
+        sample = backend_request("GET", path, headers=api_headers())
+        check_response(sample, path)
+        st.download_button("Download sample CSV", sample.content, "seats_sample.csv", "text/csv")
+    except BackendError as exc:
+        st.error(str(exc))
+
+    p1, p2 = st.columns(2)
+    standard = p1.number_input("Standard seat price (USD per month)", min_value=0.0, value=20.0, step=1.0)
+    premium = p2.number_input("Premium seat price (USD per month)", min_value=0.0, value=30.0, step=1.0)
+    uploaded = st.file_uploader("Seat CSV", type=["csv"])
+
+    if st.button("Analyze seats", type="primary"):
+        if uploaded is None:
+            st.warning("Choose a CSV file first.")
+        else:
+            try:
+                st.session_state["seat_result"] = request_json(
+                    "POST", "/cost/admin/seats/analyze", headers=api_headers(),
+                    files={"file": (uploaded.name, uploaded.getvalue(), "text/csv")},
+                    data={"standard_price": standard, "premium_price": premium},
+                )
+            except BackendError as exc:
+                st.session_state.pop("seat_result", None)
+                st.error(str(exc))
+
+    result = st.session_state.get("seat_result")
+    if not result:
+        return
+
+    m = result["metrics"]
+    st.caption(f"Active means last active within 30 days of {result['as_of']} and at least 1 message.")
+    a1, a2, a3 = st.columns(3)
+    a1.metric("Seats purchased", m["seats_purchased"])
+    a2.metric("Seats assigned", m["seats_assigned"])
+    a3.metric("Active users", m["active_users"])
+    b1, b2, b3 = st.columns(3)
+    b1.metric("Inactive assigned users", m["inactive_assigned"])
+    b2.metric("Unused paid seats", m["unused_seats"])
+    b3.metric("Premium seats to downgrade", m["downgrade_candidates"])
+    st.metric("Potential monthly saving", f"${m['potential_monthly_saving']:,.2f}")
+
+    st.markdown("### How the saving adds up")
+    st.dataframe(
+        pd.DataFrame(result["saving_breakdown"]).rename(
+            columns={"reason": "Reason", "seats": "Seats", "saving": "Saving (USD)"}
+        ),
+        use_container_width=True, hide_index=True,
+    )
+    st.markdown("### All seats")
+    st.dataframe(pd.DataFrame(result["seats"]), use_container_width=True, hide_index=True)
+
 def render_answer(result: dict[str, Any]) -> None:
     if result.get("warning"):
         st.warning(result["warning"])
@@ -1065,8 +1124,9 @@ PAGE_LABELS = {
     "Evaluation": "Evaluation",
     "Admin Logs": "Admin Logs",
     "Cost Dashboard": "Cost Dashboard",
+    "Seat Utilization": "Seat Utilization",
 }
-ADMIN_PAGES = {"Admin Logs", "Cost Dashboard"}
+ADMIN_PAGES = {"Admin Logs", "Cost Dashboard", "Seat Utilization"}
 
 with st.sidebar:
     st.markdown("### Enterprise RAG")
@@ -1104,5 +1164,7 @@ elif page == "Evaluation":
     evaluation_page()
 elif page == "Cost Dashboard":
     cost_dashboard_page()
+elif page == "Seat Utilization":
+    seat_page()
 else:
     admin_logs_page()
