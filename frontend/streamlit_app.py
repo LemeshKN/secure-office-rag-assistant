@@ -2,10 +2,11 @@ import json
 import os
 import time
 from typing import Any
+import pandas as pd
 
 import requests
 import streamlit as st
-
+import altair as alt
 
 BACKEND_URL = os.getenv("BACKEND_URL", "http://localhost:8000").rstrip("/")
 
@@ -518,6 +519,177 @@ def upload_page() -> None:
         except Exception as exc:
             st.info(str(exc))
 
+MODEL_CHOICES = ["auto", "mock-small", "mock-large"]
+
+
+def money(value: Any) -> str:
+    return f"${float(value or 0):.4f}"
+
+
+def load_cost_profile() -> dict:
+    try:
+        return request_json("GET", "/cost/me", headers=api_headers())
+    except Exception:
+        return {"projects": []}
+
+
+def chat_options() -> dict:
+    """Project and model dropdowns. Called inside the sidebar."""
+    profile = load_cost_profile()
+    projects = {p["name"]: p["id"] for p in profile.get("projects", [])}
+    st.caption("COST SETTINGS")
+    project_name = st.selectbox("Project", ["No project", *projects], key="chat_project")
+    model = st.selectbox("Model", MODEL_CHOICES, key="chat_model")
+    budget = profile.get("user_budget")
+    if budget:
+        st.caption(f"Your budget left this month: {money(budget['remaining_amount'])}")
+    return {"project_id": projects.get(project_name), "model": model}
+
+
+def request_body(question: str, settings: dict, approved: bool | None = None) -> dict:
+    body = {
+        "question": question,
+        "top_k": settings["top_k"],
+        "model": settings["model"],
+        "project_id": settings["project_id"],
+        "max_output_tokens": settings["max_output_tokens"],
+    }
+    if approved is not None:
+        body["approved"] = approved
+    return body
+
+
+def run_stream(question: str, settings: dict, approved: bool) -> None:
+    """Send the question to the stream route. Handles both reply types."""
+    conversation_id = st.session_state.get("conversation_id")
+    if conversation_id is None:
+        conversation_id = request_json("POST", "/conversations", headers=api_headers())["id"]
+        st.session_state["conversation_id"] = conversation_id
+
+    with st.chat_message("user"):
+        st.write(question)
+    answer_box = st.empty()
+    full_answer = ""
+
+    path = f"/conversations/{conversation_id}/messages/stream"
+    # No retry: the backend saves the message before streaming, so a retry could duplicate it.
+    response = backend_request(
+        "POST", path, retry=False, headers=api_headers(),
+        json=request_body(question, settings, approved), stream=True,
+    )
+    with response:
+        check_response(response, path)
+
+        # A stopped request (warn without approval, or block) comes back as JSON.
+        if "application/json" in response.headers.get("content-type", ""):
+            st.session_state["pending"] = {
+                "question": question, "settings": settings, "card": response.json(),
+            }
+            return
+
+        for line in response.iter_lines(decode_unicode=True):
+            if not line or not line.startswith("data: "):
+                continue
+            try:
+                payload = json.loads(line.removeprefix("data: "))
+            except ValueError:
+                continue
+            if payload.get("type") == "token":
+                full_answer += payload.get("content", "")
+                answer_box.write(full_answer)
+            elif payload.get("type") == "done":
+                break
+    st.session_state.pop("pending", None)
+
+
+def attempt(question: str, settings: dict) -> None:
+    """Estimate first. Allow runs at once. Anything else stores a card and waits."""
+    estimate = request_json(
+        "POST", "/cost/estimate", headers=api_headers(), json=request_body(question, settings)
+    )
+    if estimate["decision"] == "allow":
+        run_stream(question, settings, approved=False)
+    else:
+        st.session_state["pending"] = {"question": question, "settings": settings, "card": estimate}
+
+
+def guarded(action, *args) -> None:
+    try:
+        action(*args)
+    except BackendError as exc:
+        st.error(str(exc))
+        return
+    except requests.RequestException:
+        st.error("Connection to the backend was lost. Please refresh the chat.")
+        return
+    st.rerun()
+
+def plain(text: str) -> str:
+    """Stop Streamlit from reading $ as math."""
+    return text.replace("$", "\\$")
+
+def render_card(box, pending: dict) -> str | None:
+    """Draw the decision card. Returns accept, run, cancel or None."""
+    card = pending["card"]
+    decision = card.get("decision", "warn")
+    recs = card.get("recommendations", [])
+    can_accept = decision != "block" and any(r.get("suggested") for r in recs)
+    action = None
+
+    with box.container():
+        with st.chat_message("user"):
+            st.write(pending["question"])
+        with st.container(border=True):
+            reason = card.get("reason", "")
+            if decision == "block":
+                st.error(f"Blocked. {plain(reason)}")
+            elif decision == "warn":
+                st.warning(f"Warning. {plain(reason)}")
+            else:
+                st.info(plain(reason))
+                
+            c1, c2, c3, c4 = st.columns(4)
+            c1.metric("Estimated cost", money(card.get("estimated_cost")))
+            c2.metric("Input tokens", card.get("input_tokens", 0))
+            c3.metric("Output limit", card.get("output_tokens", 0))
+            remaining = card.get("lowest_remaining")
+            scope = card.get("limiting_scope") or "none"
+            c4.metric(f"Lowest budget left ({scope})", money(remaining) if remaining is not None else "n/a")
+            st.caption(f"Priced as {card.get('priced_as', 'unknown')}")
+
+            if recs:
+                st.markdown("**Recommendations**")
+                for rec in recs:
+                    st.markdown(f"- {plain(rec['message'])}")
+
+            buttons = st.columns(3)
+            if decision == "block":
+                st.caption("The server does not run blocked requests.")
+                if buttons[0].button("Cancel", key="card_cancel"):
+                    action = "cancel"
+            else:
+                if can_accept and buttons[0].button("Accept recommendation", key="card_accept", type="primary"):
+                    action = "accept"
+                if buttons[1].button("Run anyway", key="card_run"):
+                    action = "run"
+                if buttons[2].button("Cancel", key="card_cancel"):
+                    action = "cancel"
+    return action
+
+
+def handle_card_action(action: str, pending: dict) -> None:
+    settings = pending["settings"]
+    if action == "cancel":
+        st.session_state.pop("pending", None)
+        st.rerun()
+    elif action == "run":
+        guarded(run_stream, pending["question"], settings, True)
+    elif action == "accept":
+        changes: dict = {}
+        for rec in pending["card"].get("recommendations", []):
+            changes.update(rec.get("suggested", {}))
+        # The server recalculates the estimate for the new settings.
+        guarded(attempt, pending["question"], {**settings, **changes})
 
 def chat_page() -> None:
     require_login()
@@ -540,6 +712,7 @@ def chat_page() -> None:
 
     def open_conversation(conversation_id):
         st.session_state["conversation_id"] = conversation_id
+        st.session_state.pop("pending", None)
 
     def remove_conversation(conversation_id):
         try:
@@ -560,6 +733,7 @@ def chat_page() -> None:
 
         if st.button("New chat", use_container_width=True):
             st.session_state["conversation_id"] = None
+            st.session_state.pop("pending", None)
             st.rerun()
 
         st.caption("HISTORY")
@@ -597,6 +771,9 @@ def chat_page() -> None:
         delete_error = st.session_state.pop("delete_error", None)
         if delete_error:
             st.error(delete_error)
+
+        st.divider()
+        options = chat_options()
 
     conversation_id = st.session_state.get("conversation_id")
     messages = []
@@ -641,64 +818,20 @@ def chat_page() -> None:
                         if snippet:
                             st.caption(snippet)
 
+    pending = st.session_state.get("pending")
+    card_box = st.empty()
     question = st.chat_input("Ask a question...")
 
     if question and question.strip():
-        try:
-            if conversation_id is None:
-                conversation = request_json(
-                    "POST",
-                    "/conversations",
-                    headers=api_headers(),
-                )
-                conversation_id = conversation["id"]
-                st.session_state["conversation_id"] = conversation_id
-
-            with st.chat_message("user"):
-                st.write(question)
-
-            answer_box = st.empty()
-            full_answer = ""
-
-            stream_path = f"/conversations/{conversation_id}/messages/stream"
-            # No retry: the backend saves the message before streaming, so a retry could duplicate it.
-            response = backend_request(
-                "POST",
-                stream_path,
-                retry=False,
-                headers=api_headers(),
-                json={
-                    "question": question,
-                    "top_k": 5,
-                    "model": "auto",
-                },
-                stream=True,
-            )
-            with response:
-                check_response(response, stream_path)
-
-                for line in response.iter_lines(decode_unicode=True):
-                    if not line or not line.startswith("data: "):
-                        continue
-
-                    try:
-                        payload = json.loads(line.removeprefix("data: "))
-                    except ValueError:
-                        continue
-
-                    if payload.get("type") == "token":
-                        full_answer += payload.get("content", "")
-                        answer_box.write(full_answer)
-
-                    elif payload.get("type") == "done":
-                        break
-
-        except BackendError as exc:
-            st.error(str(exc))
-        except requests.RequestException:
-            st.error("Connection to the backend was lost while receiving the answer. Please refresh the chat.")
-        else:
-            st.rerun()
+        st.session_state.pop("pending", None)
+        card_box.empty()
+        settings = {**options, "top_k": 5, "max_output_tokens": None}
+        guarded(attempt, question.strip(), settings)
+    elif pending:
+        action = render_card(card_box, pending)
+        if action:
+            card_box.empty()
+            handle_card_action(action, pending)
 
 
 def evaluation_page() -> None:
@@ -732,6 +865,11 @@ def evaluation_page() -> None:
         payload = {"question": question, "expected_doc_ids": doc_ids or None}
         try:
             result = request_json("POST", "/evaluate/query", headers=api_headers(), json=payload)
+            if result.get("stopped"):
+                with result_col:
+                    st.warning(result.get("reason", "This request was stopped by the cost policy."))
+                return
+            
             with result_col:
                 st.markdown("### Results")
                 render_answer(result)
@@ -742,6 +880,7 @@ def evaluation_page() -> None:
 
 def admin_logs_page() -> None:
     require_login()
+    require_admin_role()
     st.markdown("# Admin Logs")
     st.caption("System activity and audit trail")
     try:
@@ -753,6 +892,119 @@ def admin_logs_page() -> None:
     except Exception as exc:
         st.error(str(exc))
 
+def cost_chart(frame: pd.DataFrame, x: str, kind: str) -> None:
+    """Fixed chart with a labelled y axis in US cents."""
+    frame = frame.assign(cents=frame["cost"] * 100)
+    base = alt.Chart(frame).encode(
+        x=alt.X(f"{x}:N", title=None, sort=None, axis=alt.Axis(labelAngle=0)),
+        y=alt.Y("cents:Q", title="Cost (US cents)", axis=alt.Axis(format=".3f", grid=True)),
+        tooltip=[x, alt.Tooltip("cents:Q", title="cents", format=".4f"), "requests"],
+    )
+    chart = base.mark_bar(color="#6366f1") if kind == "bar" else base.mark_line(color="#6366f1", point=True)
+    st.altair_chart(chart.properties(height=300), use_container_width=True)
+
+
+def breakdown(rows: list[dict], label: str) -> None:
+    if not rows:
+        st.info("No usage in this period.")
+        return
+    frame = pd.DataFrame(rows)
+    cost_chart(frame, label, "bar")
+    st.dataframe(frame, use_container_width=True, hide_index=True)
+
+
+def trend_chart(rows: list[dict]) -> None:
+    if not rows:
+        st.info("No usage in this period.")
+        return
+    cost_chart(pd.DataFrame(rows), "period", "line")
+
+def cost_dashboard_page() -> None:
+    require_login()
+    require_admin_role()
+    st.markdown("# Cost Dashboard")
+    st.caption("Spend comes from saved usage records. Actual cost is tokens used times the model price.")
+
+    period = st.radio("Period", ["This month", "All time"], horizontal=True)
+    params = {"this_month": "true"} if period == "This month" else None
+
+    def fetch(path: str, filtered: bool = True) -> Any:
+        return request_json(
+            "GET", f"/cost/admin/{path}", headers=api_headers(), params=params if filtered else None
+        )
+
+    try:
+        summary = fetch("summary")
+        compare = fetch("estimated-vs-actual")
+        by_department = fetch("by-department")
+        by_user = fetch("by-user")
+        by_project = fetch("by-project")
+        by_model = fetch("by-model")
+        daily = fetch("trend/daily")
+        monthly = fetch("trend/monthly")
+        budgets = fetch("budgets", filtered=False)
+        top_users = fetch("top-users")
+        top_conversations = fetch("top-conversations")
+    except Exception as exc:
+        st.error(str(exc))
+        return
+
+    m1, m2, m3 = st.columns(3)
+    m1.metric("Total spend", money(summary["actual_cost"]))
+    m2.metric("Requests", summary["requests"])
+    m3.metric("Tokens", f"{summary['total_tokens']:,}")
+
+    st.markdown("### Estimated vs actual")
+    e1, e2, e3 = st.columns(3)
+    e1.metric("Estimated", money(compare["estimated_cost"]))
+    e2.metric("Actual", money(compare["actual_cost"]))
+    percent = compare.get("difference_percent")
+    e3.metric(
+        "Difference (actual minus estimated)",
+        money(compare["difference"]),
+        delta=f"{percent:+.1f}%" if percent is not None else None,
+        delta_color="inverse",
+    )
+
+    st.markdown("### Cost breakdown")
+    tab_dept, tab_user, tab_project, tab_model = st.tabs(["Department", "User", "Project", "Model"])
+    with tab_dept:
+        breakdown(by_department, "department")
+    with tab_user:
+        breakdown(by_user, "username")
+    with tab_project:
+        breakdown(by_project, "project")
+    with tab_model:
+        breakdown(by_model, "model")
+
+    st.markdown("### Trends")
+    daily_col, monthly_col = st.columns(2)
+    with daily_col:
+        st.caption("Daily")
+        trend_chart(daily)
+    with monthly_col:
+        st.caption("Monthly")
+        trend_chart(monthly)
+
+    st.markdown("### Budget utilization")
+    st.dataframe(
+        pd.DataFrame(budgets),
+        use_container_width=True,
+        hide_index=True,
+        column_config={
+            "utilization_percent": st.column_config.ProgressColumn(
+                "utilization %", min_value=0, max_value=100, format="%.1f%%"
+            )
+        },
+    )
+
+    left, right = st.columns(2)
+    with left:
+        st.markdown("### Top expensive users")
+        st.dataframe(pd.DataFrame(top_users), use_container_width=True, hide_index=True)
+    with right:
+        st.markdown("### Top expensive conversations")
+        st.dataframe(pd.DataFrame(top_conversations), use_container_width=True, hide_index=True)
 
 def render_answer(result: dict[str, Any]) -> None:
     if result.get("warning"):
@@ -797,6 +1049,11 @@ def require_login() -> None:
         st.info("Please sign in to access this page.")
         st.stop()
 
+def require_admin_role() -> None:
+    if st.session_state.get("role") != "admin":
+        st.error("Admin access required.")
+        st.stop()
+
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Sidebar Navigation
@@ -807,7 +1064,9 @@ PAGE_LABELS = {
     "Upload Documents": "Documents",
     "Evaluation": "Evaluation",
     "Admin Logs": "Admin Logs",
+    "Cost Dashboard": "Cost Dashboard",
 }
+ADMIN_PAGES = {"Admin Logs", "Cost Dashboard"}
 
 with st.sidebar:
     st.markdown("### Enterprise RAG")
@@ -820,12 +1079,14 @@ with st.sidebar:
         if st.button("Sign out", use_container_width=True):
             sign_out()
 
+        visible_pages = [p for p in PAGE_LABELS if p not in ADMIN_PAGES or role == "admin"]
         page = st.radio(
             "Navigation",
-            list(PAGE_LABELS),
+            visible_pages,
             key="nav_page",
             format_func=PAGE_LABELS.get,
         )
+        
     else:
         page = "Login"
 
@@ -841,5 +1102,7 @@ elif page == "Chat":
     chat_page()
 elif page == "Evaluation":
     evaluation_page()
+elif page == "Cost Dashboard":
+    cost_dashboard_page()
 else:
     admin_logs_page()
