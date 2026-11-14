@@ -65,6 +65,9 @@ class ChatRequest(BaseModel):
     question: str = Field(min_length=1)
     top_k: int = Field(default=5, ge=1, le=20)
     model: str = "auto"
+    project_id: Optional[int] = None
+    max_output_tokens: Optional[int] = Field(default=None, gt=0, le=4000)
+    approved: bool = False
 
 
 class ChatResponse(BaseModel):
@@ -78,6 +81,12 @@ class ChatResponse(BaseModel):
     estimated_cost: float = 0.0
     warning: Optional[str] = None
     unsupported_sentences: list[str] = Field(default_factory=list)
+    input_tokens: int = 0
+    output_tokens: int = 0
+    actual_cost: float = 0.0
+    llm_called: bool = False
+    decision: str = "allow"
+    recommendations: list[dict[str, Any]] = Field(default_factory=list)
 
 
 class EvaluationRequest(BaseModel):
@@ -86,6 +95,9 @@ class EvaluationRequest(BaseModel):
     expected_doc_ids: Optional[list[int]] = None
     top_k: int = Field(default=5, ge=1, le=20)
     model: str = "auto"
+    project_id: Optional[int] = None
+    max_output_tokens: Optional[int] = Field(default=None, gt=0, le=4000)
+    approved: bool = False
 
 
 class EvaluationResponse(ChatResponse):

@@ -8,6 +8,8 @@ from app.config import Settings, get_settings
 from app.rag.prompt_builder import build_prompt_parts
 from app.retrieval.hybrid_retriever import RetrievedChunk
 from app.retrieval.keyword_store import tokenize
+from app.cost.pricing import calculate_cost
+from app.cost.tokens import count_tokens
 
 
 @dataclass(frozen=True)
@@ -15,6 +17,9 @@ class LLMResult:
     answer: str
     model_name: str
     estimated_cost: float = 0.0
+    input_tokens: int = 0
+    output_tokens: int = 0
+    actual_cost: float = 0.0
 
 
 class LLMClient(ABC):
@@ -25,6 +30,10 @@ class LLMClient(ABC):
 
 class MockLLMClient(LLMClient):
     model_name = "mock-grounded-llm"
+
+    def __init__(self, model_name: str | None = None) -> None:
+        if model_name:
+            self.model_name = model_name
 
     def generate(self, question: str, chunks: list[RetrievedChunk]) -> LLMResult:
         if not chunks:
@@ -42,8 +51,12 @@ class MockLLMClient(LLMClient):
             if chosen:
                 sentences.append(f"{chosen.strip()} [{chunk.document_id}:{chunk.chunk_id}]")
         answer = " ".join(sentences)
-        return LLMResult(answer, self.model_name, 0.0)
 
+        system_text, user_text = build_prompt_parts(question, chunks)
+        input_tokens = count_tokens(system_text + "\n\n" + user_text)
+        output_tokens = count_tokens(answer)
+        cost = calculate_cost(self.model_name, input_tokens, output_tokens)
+        return LLMResult(answer, self.model_name, 0.0, input_tokens, output_tokens, cost)
 
 class OpenAICompatibleClient(LLMClient):
     def __init__(self, settings: Settings, model_name: str | None = None) -> None:
@@ -123,6 +136,8 @@ class GeminiClient(LLMClient):
 def get_llm_client(model: str = "auto", settings: Settings | None = None) -> LLMClient:
     settings = settings or get_settings()
     requested = (model or "auto").lower()
+    if requested in {"mock-small", "mock-large"}:
+        return MockLLMClient(requested)
     known_providers = {"mock", "openai", "ollama", "anthropic", "gemini"}
     provider = settings.llm_provider.lower() if requested == "auto" else requested.split("/", 1)[0]
     requested_model = None if requested in {"auto", *known_providers} else model

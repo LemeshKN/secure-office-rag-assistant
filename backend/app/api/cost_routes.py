@@ -11,6 +11,7 @@ from app.database import get_db
 from app.models import Budget, Project, ProjectMember, User, UserProfile
 from app.schemas import EstimateRequest, EstimateResponse
 from app.cost.recommendations import build_recommendations, apply_recommend_decision
+from app.cost.access import check_project_access
 
 router = APIRouter(prefix="/cost", tags=["cost"])
 
@@ -26,15 +27,6 @@ def budget_out(budget: Budget | None) -> dict | None:
         "status": budget.status,
     }
 
-
-def check_project_access(db: Session, user: User, project_id: int | None) -> None:
-    """404 if the project does not exist, 403 if the user is not a member. Admin gets no exception."""
-    if project_id is None:
-        return
-    if db.get(Project, project_id) is None:
-        raise HTTPException(status_code=404, detail="Project not found")
-    if db.get(ProjectMember, (project_id, user.id)) is None:
-        raise HTTPException(status_code=403, detail="You are not a member of this project")
 
 
 @router.get("/me")

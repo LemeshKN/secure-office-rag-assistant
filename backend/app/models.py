@@ -186,7 +186,6 @@ class LLMUsage(Base):
     conversation_id: Mapped[int | None] = mapped_column(Integer, nullable=True, index=True)
     query_log_id: Mapped[int | None] = mapped_column(Integer, nullable=True, index=True)
     model_name: Mapped[str] = mapped_column(String(120), index=True, nullable=False)
-    model_name: Mapped[str] = mapped_column(String(120), index=True, nullable=False)
     input_tokens: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
     output_tokens: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
     latency_ms: Mapped[int] = mapped_column(Integer, default=0, nullable=False)

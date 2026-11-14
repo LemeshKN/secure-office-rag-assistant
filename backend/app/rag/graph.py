@@ -31,6 +31,10 @@ class RAGState(TypedDict, total=False):
     model_name: str
     estimated_cost: float
     warning: str | None
+    input_tokens: int
+    output_tokens: int
+    actual_cost: float
+    llm_called: bool
 
 
 class RAGWorkflow:
@@ -58,6 +62,7 @@ class RAGWorkflow:
             "user_role": self.user.role,
             "question": question,
             "top_k": top_k,
+            
         }
         if self.graph is not None:
             state = dict(self.graph.invoke(initial))
@@ -76,6 +81,10 @@ class RAGWorkflow:
             estimated_cost=state.get("estimated_cost", 0.0),
             warning=state.get("warning"),
             unsupported_sentences=state.get("unsupported_sentences", []),
+            input_tokens=state.get("input_tokens", 0),
+            output_tokens=state.get("output_tokens", 0),
+            actual_cost=state.get("actual_cost", 0.0),
+            llm_called=state.get("llm_called", False),
         )
 
     def retrieve(self, state: RAGState) -> RAGState:
@@ -109,6 +118,10 @@ class RAGWorkflow:
             "answer": result.answer,
             "model_name": result.model_name,
             "estimated_cost": result.estimated_cost,
+            "input_tokens": result.input_tokens,
+            "output_tokens": result.output_tokens,
+            "actual_cost": result.actual_cost,
+            "llm_called": True,
         }
 
     def verify_grounding(self, state: RAGState) -> RAGState:

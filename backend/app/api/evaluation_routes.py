@@ -3,10 +3,10 @@ from typing import Annotated
 from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
 
-from app.api.chat_routes import run_rag_request
+from fastapi.responses import JSONResponse
+from app.cost.governed import run_governed
 from app.auth.security import get_current_user
 from app.database import get_db
-from app.logging_utils.query_logger import log_query
 from app.models import User
 from app.rag.evaluator import retrieval_precision
 from app.retrieval.hybrid_retriever import RetrievedChunk
@@ -21,8 +21,15 @@ def evaluate_query(
     request: EvaluationRequest,
     current_user: Annotated[User, Depends(get_current_user)],
     db: Annotated[Session, Depends(get_db)],
-) -> EvaluationResponse:
-    chat_response = run_rag_request(db, current_user, request.question, request.top_k, request.model)
+):
+    outcome = run_governed(
+        db, current_user, request.question, request.top_k, request.model,
+        request.project_id, request.max_output_tokens, request.approved,
+    )
+    if outcome.card is not None:
+        return JSONResponse(outcome.card)
+    chat_response = outcome.response
+    
     precision = retrieval_precision(
         [
             RetrievedChunk(
@@ -42,6 +49,5 @@ def evaluate_query(
         request.expected_doc_ids,
     )
     response = EvaluationResponse(**chat_response.model_dump(), retrieval_precision=precision)
-    log_query(db, current_user, request.question, response)
     return response
 

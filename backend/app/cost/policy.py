@@ -3,6 +3,7 @@ from sqlalchemy.orm import Session
 from app.config import get_settings
 from app.cost.budgets import find_budget
 from app.models import Budget, User, UserProfile
+from app.cost.budget_period import remaining_amount
 
 
 def collect_budgets(db: Session, user: User, project_id: int | None) -> list[tuple[str, Budget]]:
@@ -33,7 +34,7 @@ def evaluate_policy(
     settings = get_settings()
     found = collect_budgets(db, user, project_id)
     budgets = [
-        {"scope": scope, "budget_amount": b.budget_amount, "remaining_amount": b.remaining_amount}
+        {"scope": scope, "budget_amount": b.budget_amount, "remaining_amount": remaining_amount(b)}
         for scope, b in found
     ]
 
@@ -54,8 +55,8 @@ def evaluate_policy(
 
     # min() keeps the first item on a tie, so the order user, department, project decides ties.
     # Rounding to 8 decimals removes float noise such as 0.03 - 0.005.
-    scope, budget = min(found, key=lambda item: round(item[1].remaining_amount, 8))
-    remaining = round(budget.remaining_amount, 8)
+    scope, budget = min(found, key=lambda item: round(remaining_amount(item[1]), 8))
+    remaining = round(remaining_amount(budget), 8)
     estimate = round(estimated_cost, 8)
 
     if remaining <= 0 and estimate > 0:

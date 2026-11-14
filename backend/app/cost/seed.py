@@ -4,6 +4,7 @@ from sqlalchemy.orm import Session
 
 from app.cost.budgets import find_budget
 from app.models import Budget, Project, ProjectMember, User, UserProfile
+from app.cost.budget_period import current_month_start
 
 
 DEPARTMENTS = {
@@ -30,8 +31,7 @@ PROJECT_BUDGETS = {"Apollo": 0.15, "Internal Tools": 0.10, "HR Onboarding": 0.10
 def seed_cost_data(db: Session) -> None:
     """Create missing demo profiles, projects, members and budgets. Existing rows are left alone."""
     users = {user.username: user for user in db.query(User).all()}
-    period_start = datetime.utcnow().replace(day=1, hour=0, minute=0, second=0, microsecond=0)
-
+    period_start = current_month_start()
     for username, department in DEPARTMENTS.items():
         user = users.get(username)
         if user is not None and db.get(UserProfile, user.id) is None:

@@ -11,6 +11,7 @@ def log_query(
     user: User,
     question: str,
     response: ChatResponse,
+    commit: bool = True,
 ) -> QueryLog:
     cited_chunk_ids = [citation.chunk_id for citation in response.citations]
     retrieved_chunk_ids = [chunk.chunk_id for chunk in response.retrieved_chunks]
@@ -27,7 +28,10 @@ def log_query(
         evidence_score=response.evidence_score,
     )
     db.add(log)
-    db.commit()
-    db.refresh(log)
+    if commit:
+        db.commit()
+        db.refresh(log)
+    else:
+        db.flush()
     return log
 

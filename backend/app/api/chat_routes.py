@@ -9,10 +9,11 @@ from sqlalchemy.orm import Session
 
 from app.auth.security import get_current_user
 from app.database import get_db
-from app.logging_utils.query_logger import log_query
 from app.models import ChatMessage, Conversation, User
 from app.rag.workflow_factory import build_workflow
 from app.schemas import ChatRequest, ChatResponse
+from fastapi.responses import JSONResponse, StreamingResponse
+from app.cost.governed import run_governed
 
 router = APIRouter(tags=["chat"])
 
@@ -22,10 +23,14 @@ def chat(
     request: ChatRequest,
     current_user: Annotated[User, Depends(get_current_user)],
     db: Annotated[Session, Depends(get_db)],
-) -> ChatResponse:
-    response = run_rag_request(db, current_user, request.question, request.top_k, request.model)
-    log_query(db, current_user, request.question, response)
-    return response
+):
+    outcome = run_governed(
+        db, current_user, request.question, request.top_k, request.model,
+        request.project_id, request.max_output_tokens, request.approved,
+    )
+    if outcome.card is not None:
+        return JSONResponse(outcome.card)
+    return outcome.response
 
 
 def run_rag_request(
@@ -45,7 +50,7 @@ def stream_message(
     request: ChatRequest,
     current_user: Annotated[User, Depends(get_current_user)],
     db: Annotated[Session, Depends(get_db)],
-) -> StreamingResponse:
+):
     conversation = (
         db.query(Conversation)
         .filter(
@@ -61,13 +66,14 @@ def stream_message(
             detail="Conversation not found",
         )
 
-    response = run_rag_request(
-        db,
-        current_user,
-        request.question,
-        request.top_k,
-        request.model,
+    outcome = run_governed(
+        db, current_user, request.question, request.top_k, request.model,
+        request.project_id, request.max_output_tokens, request.approved,
+        conversation_id=conversation.id,
     )
+    if outcome.card is not None:
+        return JSONResponse(outcome.card)
+    response = outcome.response
 
     answer_text = response.answer
     conversation_id_value = conversation.id
@@ -80,7 +86,6 @@ def stream_message(
     if has_messages is None:
         conversation.title = request.question.strip()[:200] or "New chat"
 
-    log_query(db, current_user, request.question, response)
 
     user_message = ChatMessage(
         conversation_id=conversation_id_value,

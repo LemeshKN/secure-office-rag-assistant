@@ -8,7 +8,8 @@ from app.auth.security import get_current_user
 from app.database import get_db
 from app.models import ChatMessage, Conversation, User
 
-from app.api.chat_routes import run_rag_request
+from fastapi.responses import JSONResponse
+from app.cost.governed import run_governed
 from app.schemas import ChatRequest, ChatResponse
 
 
@@ -108,7 +109,7 @@ def send_message(
     request: ChatRequest,
     current_user: Annotated[User, Depends(get_current_user)],
     db: Annotated[Session, Depends(get_db)],
-) -> ChatResponse:
+):
     conversation = (
         db.query(Conversation)
         .filter(
@@ -124,13 +125,14 @@ def send_message(
             detail="Conversation not found",
         )
 
-    response = run_rag_request(
-        db,
-        current_user,
-        request.question,
-        request.top_k,
-        request.model,
+    outcome = run_governed(
+        db, current_user, request.question, request.top_k, request.model,
+        request.project_id, request.max_output_tokens, request.approved,
+        conversation_id=conversation.id,
     )
+    if outcome.card is not None:
+        return JSONResponse(outcome.card)
+    response = outcome.response
 
     user_message = ChatMessage(
         conversation_id=conversation.id,
