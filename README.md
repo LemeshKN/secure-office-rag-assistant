@@ -9,7 +9,18 @@ The goal was not to build another chatbot demo. This project focuses on the part
 For detailed local setup, Docker deployment, environment variables, privacy testing, sample documents, and production recommendations, see [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md).
 ## Demo Screenshots
 
-Screenshots will be added after the final UI testing.
+.Screenshots to add in `docs/screenshots/`:
+
+- Chat page with the project and model dropdowns
+- Recommend card (Accept recommendation, Run anyway, Cancel)
+- Warn card
+- Block card (Cancel only)
+- Answer with `[doc_id:chunk_id]` citations
+- Cost Dashboard: totals, breakdown tabs, trends, budget utilization
+- Estimated vs actual panel
+- Admin Logs with token and cost columns
+- Seat Utilization results from the sample CSV
+- `docker compose up` running in the terminal
 
 ## What This Project Shows
 
@@ -30,16 +41,19 @@ flowchart LR
     UI --> API["FastAPI backend"]
     API --> Auth["JWT auth + RBAC"]
     API --> Ingest["Document ingestion"]
-    Ingest --> SQLite["SQLite metadata + logs"]
+    Ingest --> SQLite["SQLite metadata, budgets, usage, logs"]
     Ingest --> Chroma["ChromaDB vector store"]
-    API --> Graph["LangGraph RAG workflow"]
-    Graph --> Hybrid["Hybrid retriever"]
+    API --> Gov["Governed run"]
+    Gov --> Est["Pre-flight estimate (no LLM call)"]
+    Est --> Hybrid["Permission-filtered hybrid retriever"]
     Hybrid --> Chroma
-    Hybrid --> SQLite
-    Graph --> Rerank["Reranker"]
-    Graph --> Evidence["Evidence checker"]
-    Graph --> LLM["OpenAI-compatible / Ollama / mock LLM"]
-    Graph --> Grounding["Grounding checker"]
+    Gov --> Policy["Budget check and policy"]
+    Policy --> SQLite
+    Gov --> Graph["LangGraph RAG workflow"]
+    Graph --> LLM["Mock / OpenAI-compatible / Ollama LLM"]
+    Gov --> SQLite
+    API --> Dash["Admin cost dashboard and seat demo"]
+    Dash --> SQLite
 ```
 
 The main rule is simple: **private chunks should never be retrieved and then filtered after the fact**. Vector search uses Chroma metadata filters, and keyword search builds its BM25 corpus only from documents the user is allowed to access. The hybrid retriever also performs a final authorization check before anything is sent into the RAG workflow.
@@ -228,8 +242,17 @@ When is the internal budget review scheduled?
 | `POST` | `/conversations/{id}/messages/stream` | Ask a question with word-by-word streaming |
 | `DELETE` | `/conversations/{id}` | Delete a conversation |
 | `POST` | `/evaluate/query` | Run a query with evaluation metrics |
-| `GET` | `/logs` | Admin-only query logs |
+| `GET` | `/logs` | Admin-only query logs with token and cost fields|
 | `GET` | `/health` | Backend health check |
+| `GET` | `/cost/me` | Current user's department, budgets and projects |
+| `POST` | `/cost/estimate` | Pre-flight estimate, policy decision and recommendations |
+| `GET` | `/cost/admin/summary` | Admin: total spend, requests, tokens |
+| `GET` | `/cost/admin/by-user`, `/by-department`, `/by-project`, `/by-model` | Admin: cost breakdowns |
+| `GET` | `/cost/admin/trend/daily`, `/trend/monthly` | Admin: spend trends |
+| `GET` | `/cost/admin/budgets` | Admin: budget utilization |
+| `GET` | `/cost/admin/estimated-vs-actual` | Admin: estimate accuracy |
+| `GET` | `/cost/admin/top-users`, `/top-conversations` | Admin: top spenders |
+| `POST` | `/cost/admin/seats/analyze` | Admin: seat utilization from a CSV |
 
 ## How Access Control Works
 
@@ -272,6 +295,45 @@ The flow is:
 7. Return the answer, citations, metrics, and retrieved metadata.
 
 The generation prompt tells the model to answer only from provided context and cite every factual claim using `[doc_id:chunk_id]`.
+
+## Cost Governance
+
+Every chat request goes through one function, `run_governed`. The routes `/chat`, the stream route, `send_message` and `/evaluate/query` all use it.
+
+1. The server runs permission-filtered retrieval and builds the final prompt. No LLM call happens.
+2. It estimates the cost: input tokens (characters divided by 4, rounded up) plus the output limit (default 800), priced from the model's rate.
+3. It checks the user, department and project budgets. The lowest remaining amount decides.
+4. The policy returns one decision:
+   - **block**: the estimate is above the lowest remaining budget. The server never runs it, even if the browser sends approval.
+   - **warn**: the estimate uses 50% or more of the lowest remaining budget. The user must approve.
+   - **recommend**: within budget, but a rule found cheaper settings.
+   - **allow**: the request runs at once.
+5. After the run, the system saves actual tokens, actual cost and the difference from the estimate. It updates the budgets in the same commit.
+
+Budgets are monthly (Asia/Kolkata). A budget from a past month counts as used 0, and all usage history is kept.
+
+Costs are demo values. The LLM is a mock, so cost is real token counts times a price table, not a provider bill. The mock does not enforce the output limit, so actual cost is usually far below the estimate.
+
+Recommendation rules: simple question, large context, long output expected, repeated question (information only), budget nearly used.
+
+Settings in `.env`: `MAX_OUTPUT_TOKENS`, `WARN_THRESHOLD`, `LARGE_CONTEXT_TOKENS`, `RECOMMENDED_TOP_K`, `SHORT_OUTPUT_TOKENS`, `NEAR_BUDGET_RATIO`, `REPEAT_WINDOW_DAYS`.
+
+### Example flow
+
+1. Priya (developer, Engineering) uploads her private project notes.
+2. She picks `mock-large` and asks: "Summarize the private project notes."
+3. A card shows the estimate (about $0.008), her remaining budget and a recommendation to limit output to 300 tokens.
+4. She clicks Accept recommendation. The server recalculates the estimate and runs the request once.
+5. The answer carries `[doc_id:chunk_id]` citations.
+6. Admin opens Cost Dashboard and sees Engineering spend, estimated vs actual and budget utilization updated.
+
+### Admin access
+
+Admin can see every document in RAG answers, including private notes. This is intended. Every other role sees only documents it owns or that are shared with it, and the permission filter runs before retrieval.
+
+### Seat utilization demo
+
+Admin uploads a CSV of AI seats and sets seat prices. The page shows unused seats, inactive seats, premium seats to downgrade and the potential monthly saving. It uses demo data only and saves nothing.
 
 ## Streaming Responses
 
@@ -335,6 +397,12 @@ The tests cover:
 - weak-evidence refusal
 - strong single-chunk evidence
 - admin-only logs
+- cost calculation
+- budgets
+- policy
+- recommendations
+- governed run
+- admin cost APIs and seat utilization
 
 ## Project Structure
 
