@@ -21,7 +21,7 @@ from app.retrieval.vector_store import InMemoryVectorStore, VectorRecord
 class FailingLLM(LLMClient):
     model_name = "mock-grounded-llm"
 
-    def generate(self, question, chunks):
+    def generate(self, question, chunks, max_output_tokens=None):
         raise AssertionError("The LLM must not be called during an estimate.")
 
 

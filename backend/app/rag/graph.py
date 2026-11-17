@@ -18,6 +18,7 @@ class RAGState(TypedDict, total=False):
     user_role: str
     question: str
     top_k: int
+    max_output_tokens: int | None
     retrieved_chunks: list[RetrievedChunk]
     reranked_chunks: list[RetrievedChunk]
     evidence_score: float
@@ -55,13 +56,14 @@ class RAGWorkflow:
         self.settings = settings or get_settings()
         self.graph = self._build_graph()
 
-    def run(self, question: str, top_k: int = 5) -> ChatResponse:
+    def run(self, question: str, top_k: int = 5, max_output_tokens: int | None = None) -> ChatResponse:
         started = time.perf_counter()
         initial: RAGState = {
             "user_id": self.user.id,
             "user_role": self.user.role,
             "question": question,
             "top_k": top_k,
+            "max_output_tokens": max_output_tokens,
             
         }
         if self.graph is not None:
@@ -112,7 +114,9 @@ class RAGWorkflow:
     def generate_answer(self, state: RAGState) -> RAGState:
         if not state.get("should_answer"):
             return state
-        result = self.llm_client.generate(state["question"], state.get("reranked_chunks", []))
+        result = self.llm_client.generate(
+            state["question"], state.get("reranked_chunks", []), state.get("max_output_tokens")
+        )
         return {
             **state,
             "answer": result.answer,

@@ -12,6 +12,7 @@ from app.logging_utils.query_logger import log_query
 from app.models import LLMUsage, User, UserProfile
 from app.rag.workflow_factory import build_workflow
 from app.schemas import ChatResponse
+from app.config import get_settings
 
 
 @dataclass
@@ -44,7 +45,8 @@ def run_governed(
     if decision == "block" or (decision == "warn" and not approved):
         return GovernedOutcome(card={**estimate, **policy, "recommendations": recs, "stopped": True})
 
-    response = build_workflow(db, user, model).run(question, top_k)
+    cap = max_output_tokens or get_settings().max_output_tokens
+    response = build_workflow(db, user, model).run(question, top_k, cap)
     response.estimated_cost = estimate["estimated_cost"]
     response.decision = decision
     response.recommendations = recs

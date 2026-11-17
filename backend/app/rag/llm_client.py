@@ -24,7 +24,7 @@ class LLMResult:
 
 class LLMClient(ABC):
     @abstractmethod
-    def generate(self, question: str, chunks: list[RetrievedChunk]) -> LLMResult:
+    def generate(self, question: str, chunks: list[RetrievedChunk], max_output_tokens: int | None = None) -> LLMResult:
         raise NotImplementedError
 
 
@@ -35,7 +35,7 @@ class MockLLMClient(LLMClient):
         if model_name:
             self.model_name = model_name
 
-    def generate(self, question: str, chunks: list[RetrievedChunk]) -> LLMResult:
+    def generate(self, question: str, chunks: list[RetrievedChunk], max_output_tokens: int | None = None) -> LLMResult:
         if not chunks:
             return LLMResult(
                 "I do not have enough evidence in the accessible documents to answer this question.",
@@ -66,7 +66,7 @@ class OpenAICompatibleClient(LLMClient):
         self.model_name = model_name or settings.openai_model
         self.client = OpenAI(api_key=settings.openai_api_key, base_url=settings.openai_base_url or None)
 
-    def generate(self, question: str, chunks: list[RetrievedChunk]) -> LLMResult:
+    def generate(self, question: str, chunks: list[RetrievedChunk], max_output_tokens: int | None = None) -> LLMResult:
         system_text, user_text = build_prompt_parts(question, chunks)
         response = self.client.chat.completions.create(
             model=self.model_name,
@@ -86,7 +86,7 @@ class OllamaClient(LLMClient):
         self.settings = settings
         self.model_name = model_name or settings.ollama_model
 
-    def generate(self, question: str, chunks: list[RetrievedChunk]) -> LLMResult:
+    def generate(self, question: str, chunks: list[RetrievedChunk], max_output_tokens: int | None = None) -> LLMResult:
         system_text, user_text = build_prompt_parts(question, chunks)
         prompt = system_text + "\n\n" + user_text
         response = requests.post(
@@ -105,7 +105,7 @@ class AnthropicClient(LLMClient):
         self.model_name = model_name or settings.anthropic_model
         self.client = anthropic.Anthropic(api_key=settings.anthropic_api_key)
 
-    def generate(self, question: str, chunks: list[RetrievedChunk]) -> LLMResult:
+    def generate(self, question: str, chunks: list[RetrievedChunk], max_output_tokens: int | None = None) -> LLMResult:
         system_text, user_text = build_prompt_parts(question, chunks)
         response = self.client.messages.create(
             model=self.model_name,
@@ -128,7 +128,7 @@ class GeminiClient(LLMClient):
         system_text, _ = build_prompt_parts("", [])
         self.model = genai.GenerativeModel(self.model_name, system_instruction=system_text)
 
-    def generate(self, question: str, chunks: list[RetrievedChunk]) -> LLMResult:
+    def generate(self, question: str, chunks: list[RetrievedChunk], max_output_tokens: int | None = None) -> LLMResult:
         _, user_text = build_prompt_parts(question, chunks)
         response = self.model.generate_content(user_text)
         return LLMResult(getattr(response, "text", ""), f"gemini/{self.model_name}", 0.0)

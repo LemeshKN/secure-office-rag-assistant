@@ -45,9 +45,9 @@ def llm_calls(cost_client, session_factory, monkeypatch):
     calls = []
 
     class CountingLLM(MockLLMClient):
-        def generate(self, question, chunks):
+        def generate(self, question, chunks, max_output_tokens=None):
             calls.append(question)
-            return super().generate(question, chunks)
+            return super().generate(question, chunks, max_output_tokens)
 
     def fake_build_workflow(db, user, model="auto"):
         settings = Settings()
