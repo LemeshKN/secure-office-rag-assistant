@@ -10,6 +10,7 @@ from app.retrieval.hybrid_retriever import RetrievedChunk
 from app.retrieval.keyword_store import tokenize
 from app.cost.pricing import calculate_cost
 from app.cost.tokens import count_tokens
+from app.rag.citation import normalize_citations
 
 
 @dataclass(frozen=True)
@@ -152,7 +153,7 @@ class GeminiClient(LLMClient):
         except Exception as exc:
             raise _gemini_error(exc) from exc
 
-        answer = _gemini_text(response)
+        answer = normalize_citations(_gemini_text(response))
         if not answer.strip():
             raise LLMError(
                 "Gemini returned an empty answer. If the output limit is very low, raise it and try again."

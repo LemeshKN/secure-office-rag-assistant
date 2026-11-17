@@ -6,7 +6,12 @@ from app.schemas import Citation, RetrievedChunkOut
 
 
 CITATION_RE = re.compile(r"\[(?P<doc_id>\d+):(?P<chunk_id>\d+)\]")
+LONG_CITATION_RE = re.compile(r"\[\s*doc_id\s*=\s*(\d+)\s*,?\s*chunk_id\s*=\s*(\d+)[^\]]*\]")
 
+
+def normalize_citations(answer: str) -> str:
+    """Rewrite [doc_id=3 chunk_id=7] as [3:7]."""
+    return LONG_CITATION_RE.sub(r"[\1:\2]", answer or "")
 
 def format_context(chunks: list[RetrievedChunk]) -> str:
     sections: list[str] = []
@@ -25,9 +30,9 @@ def extract_cited_chunk_ids(answer: str) -> set[int]:
 
 def build_citations(answer: str, chunks: list[RetrievedChunk], max_citations: int = 5) -> list[Citation]:
     cited_chunk_ids = extract_cited_chunk_ids(answer)
-    selected = [
-        chunk for chunk in chunks if not cited_chunk_ids or chunk.chunk_id in cited_chunk_ids
-    ][:max_citations]
+    if not cited_chunk_ids:
+        return []  # an answer that cites nothing shows no sources
+    selected = [chunk for chunk in chunks if chunk.chunk_id in cited_chunk_ids][:max_citations]
     return [
         Citation(
             document_id=chunk.document_id,
