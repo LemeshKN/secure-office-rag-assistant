@@ -31,6 +31,8 @@ class Settings(BaseSettings):
     embedding_provider: str = "auto"
     local_embedding_model: str = "sentence-transformers/all-MiniLM-L6-v2"
     openai_embedding_model: str = "text-embedding-3-small"
+    gemini_embedding_model: str = "gemini-embedding-001"
+    gemini_embedding_dimensions: int = 768
 
     llm_provider: str = "auto"
     openai_api_key: Optional[str] = Field(default=None, alias="OPENAI_API_KEY")

@@ -9,6 +9,12 @@ from app.config import Settings, get_settings
 
 TOKEN_RE = re.compile(r"[A-Za-z0-9_]+")
 
+class EmbeddingError(Exception):
+    """An embedding call failed. The message is safe to show to the user."""
+
+    def __init__(self, message: str, status_code: int = 500) -> None:
+        super().__init__(message)
+        self.status_code = status_code
 
 class EmbeddingProvider(ABC):
     model_name: str
@@ -77,6 +83,46 @@ class OpenAIEmbeddingProvider(EmbeddingProvider):
     def embed_query(self, text: str) -> list[float]:
         return self.embed_documents([text])[0]
 
+class GeminiEmbeddingProvider(EmbeddingProvider):
+    BATCH_SIZE = 50
+
+    def __init__(self, settings: Settings, client=None) -> None:
+        if client is None:
+            if not settings.gemini_api_key:
+                raise EmbeddingError("Gemini embeddings need GEMINI_API_KEY on the server.", 400)
+            from google import genai
+
+            client = genai.Client(api_key=settings.gemini_api_key)
+        self.client = client
+        self.dimensions = settings.gemini_embedding_dimensions
+        self._api_model = settings.gemini_embedding_model
+        self.model_name = f"{self._api_model}-{self.dimensions}"
+
+    def embed_documents(self, texts: list[str]) -> list[list[float]]:
+        vectors: list[list[float]] = []
+        for start in range(0, len(texts), self.BATCH_SIZE):
+            vectors.extend(self._embed(texts[start : start + self.BATCH_SIZE], "RETRIEVAL_DOCUMENT"))
+        return vectors
+
+    def embed_query(self, text: str) -> list[float]:
+        return self._embed([text], "RETRIEVAL_QUERY")[0]
+
+    def _embed(self, texts: list[str], task_type: str) -> list[list[float]]:
+        from google.genai import types
+
+        config = types.EmbedContentConfig(task_type=task_type, output_dimensionality=self.dimensions)
+        try:
+            response = self.client.models.embed_content(model=self._api_model, contents=texts, config=config)
+        except Exception as exc:
+            if getattr(exc, "code", None) == 429:
+                raise EmbeddingError("Gemini rate limit reached. Wait a minute and try again.", 429) from exc
+            raise EmbeddingError("Gemini could not create embeddings right now. Please try again.", 500) from exc
+        return [_unit_vector(item.values) for item in response.embeddings]
+
+
+def _unit_vector(values: list[float]) -> list[float]:
+    norm = math.sqrt(sum(value * value for value in values)) or 1.0
+    return [value / norm for value in values]
 
 def get_embedding_provider(settings: Settings | None = None) -> EmbeddingProvider:
     settings = settings or get_settings()
@@ -86,6 +132,9 @@ def get_embedding_provider(settings: Settings | None = None) -> EmbeddingProvide
         openai_base_url=settings.openai_base_url or "",
         openai_embedding_model=settings.openai_embedding_model,
         local_embedding_model=settings.local_embedding_model,
+        gemini_api_key=settings.gemini_api_key or "",
+        gemini_embedding_model=settings.gemini_embedding_model,
+        gemini_embedding_dimensions=settings.gemini_embedding_dimensions,
     )
 
 
@@ -96,6 +145,9 @@ def _get_embedding_provider_cached(
     openai_base_url: str,
     openai_embedding_model: str,
     local_embedding_model: str,
+    gemini_api_key: str = "",
+    gemini_embedding_model: str = "gemini-embedding-001",
+    gemini_embedding_dimensions: int = 768,
 ) -> EmbeddingProvider:
     settings = get_settings().model_copy(
         update={
@@ -104,9 +156,16 @@ def _get_embedding_provider_cached(
             "openai_base_url": openai_base_url or None,
             "openai_embedding_model": openai_embedding_model,
             "local_embedding_model": local_embedding_model,
+            "gemini_api_key": gemini_api_key or None,
+            "gemini_embedding_model": gemini_embedding_model,
+            "gemini_embedding_dimensions": gemini_embedding_dimensions,
         }
     )
     provider = provider.lower()
+
+    if provider == "gemini":
+        # No silent fallback: mixing hash vectors with Gemini vectors would break search.
+        return GeminiEmbeddingProvider(settings)
 
     if provider in {"auto", "openai"} and settings.openai_api_key:
         try:
