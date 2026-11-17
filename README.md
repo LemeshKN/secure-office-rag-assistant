@@ -318,6 +318,22 @@ Recommendation rules: simple question, large context, long output expected, repe
 
 Settings in `.env`: `MAX_OUTPUT_TOKENS`, `WARN_THRESHOLD`, `LARGE_CONTEXT_TOKENS`, `RECOMMENDED_TOP_K`, `SHORT_OUTPUT_TOKENS`, `NEAR_BUDGET_RATIO`, `REPEAT_WINDOW_DAYS`.
 
+## Cost figures are estimated equivalent costs
+
+The Gemini free tier does not bill, so the dollar amounts in this app are not charges.
+They are the "estimated equivalent cost": the tokens used, priced at Gemini's paid rates.
+Budgets, warnings and the admin dashboard all use this number.
+
+- Prices live in one table: `backend/app/cost/pricing.py`.
+- `gemini-3.5-flash-lite` is priced at 0.30 USD input and 2.50 USD output per 1M tokens.
+- `gemini-3.8-flash` is priced at 0.75 USD input and 3.75 USD output per 1M tokens
+  through 2026-12-31. Google raises it to 1.50 and 7.50 on 2027-01-01.
+- After a request, token counts come from the numbers Gemini reports. Thinking tokens
+  count as output. The estimate before a request uses characters divided by 4.
+- Mock models are priced from the same table.
+- On the free tier, Google may use requests to improve its products. Use only sample or
+  public documents with a free key.
+
 ### Example flow
 
 1. Priya (developer, Engineering) uploads her private project notes.

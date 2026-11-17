@@ -548,6 +548,7 @@ def chat_options() -> dict:
     budget = profile.get("user_budget")
     if budget:
         st.caption(f"Your budget left this month: {money(budget['remaining_amount'])}")
+        st.caption("Costs are estimated equivalent costs. The free Gemini tier may not bill.")
     return {"project_id": projects.get(project_name), "model": model}
 
 
@@ -654,14 +655,13 @@ def render_card(box, pending: dict) -> str | None:
                 st.info(plain(reason))
 
             c1, c2, c3, c4 = st.columns(4)
-            c1.metric("Estimated cost", money(card.get("estimated_cost")))
+            c1.metric("Estimated equivalent cost", money(card.get("estimated_cost")))
             c2.metric("Input tokens", card.get("input_tokens", 0))
             c3.metric("Output limit", card.get("output_tokens", 0))
             remaining = card.get("lowest_remaining")
             scope = card.get("limiting_scope") or "none"
             c4.metric(f"Lowest budget left ({scope})", money(remaining) if remaining is not None else "n/a")
-            st.caption(f"Priced as {card.get('priced_as', 'unknown')}")
-
+            st.caption(f"Priced as {card.get('priced_as', 'unknown')}. Estimated equivalent cost: the free tier may not bill.")
             if recs:
                 st.markdown("**Recommendations**")
                 for rec in recs:
@@ -928,8 +928,10 @@ def cost_dashboard_page() -> None:
     require_login()
     require_admin_role()
     st.markdown("# Cost Dashboard")
-    st.caption("Spend comes from saved usage records. Actual cost is tokens used times the model price.")
-
+    st.caption(
+        "Spend comes from saved usage records. Actual cost is tokens used times the model price. "
+        "All figures are estimated equivalent costs. The free Gemini tier may not bill."
+    )
     period = st.radio("Period", ["This month", "All time"], horizontal=True)
     params = {"this_month": "true"} if period == "This month" else None
 
@@ -955,7 +957,7 @@ def cost_dashboard_page() -> None:
         return
 
     m1, m2, m3 = st.columns(3)
-    m1.metric("Total spend", money(summary["actual_cost"]))
+    m1.metric("Total spend (equivalent)", money(summary["actual_cost"]))
     m2.metric("Requests", summary["requests"])
     m3.metric("Tokens", f"{summary['total_tokens']:,}")
 
