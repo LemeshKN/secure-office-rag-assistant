@@ -21,6 +21,13 @@ class LLMResult:
     output_tokens: int = 0
     actual_cost: float = 0.0
 
+class LLMError(Exception):
+    """A model call failed. The message is safe to show to the user."""
+
+    def __init__(self, message: str, status_code: int = 500) -> None:
+        super().__init__(message)
+        self.status_code = status_code
+
 
 class LLMClient(ABC):
     @abstractmethod
@@ -119,19 +126,69 @@ class AnthropicClient(LLMClient):
 
 
 class GeminiClient(LLMClient):
-    def __init__(self, settings: Settings, model_name: str | None = None) -> None:
-        import google.generativeai as genai
-
+    def __init__(self, settings: Settings, model_name: str | None = None, client=None) -> None:
         self.settings = settings
         self.model_name = model_name or settings.gemini_model
-        genai.configure(api_key=settings.gemini_api_key)
-        system_text, _ = build_prompt_parts("", [])
-        self.model = genai.GenerativeModel(self.model_name, system_instruction=system_text)
+        if client is None:
+            from google import genai
 
-    def generate(self, question: str, chunks: list[RetrievedChunk], max_output_tokens: int | None = None) -> LLMResult:
-        _, user_text = build_prompt_parts(question, chunks)
-        response = self.model.generate_content(user_text)
-        return LLMResult(getattr(response, "text", ""), f"gemini/{self.model_name}", 0.0)
+            client = genai.Client(api_key=settings.gemini_api_key)
+        self.client = client
+
+    def generate(
+        self, question: str, chunks: list[RetrievedChunk], max_output_tokens: int | None = None
+    ) -> LLMResult:
+        from google.genai import types
+
+        system_text, user_text = build_prompt_parts(question, chunks)
+        config = types.GenerateContentConfig(
+            system_instruction=system_text,
+            max_output_tokens=max_output_tokens or self.settings.max_output_tokens,
+        )
+        try:
+            response = self.client.models.generate_content(
+                model=self.model_name, contents=user_text, config=config
+            )
+        except Exception as exc:
+            raise _gemini_error(exc) from exc
+
+        answer = _gemini_text(response)
+        if not answer.strip():
+            raise LLMError(
+                "Gemini returned an empty answer. If the output limit is very low, raise it and try again."
+            )
+
+        usage = getattr(response, "usage_metadata", None)
+        prompt = getattr(usage, "prompt_token_count", None)
+        candidates = getattr(usage, "candidates_token_count", None)
+        thoughts = getattr(usage, "thoughts_token_count", None) or 0
+        if prompt is None or candidates is None:
+            # The provider sent no usage, so fall back to the local counter.
+            input_tokens = count_tokens(system_text + "\n\n" + user_text)
+            output_tokens = count_tokens(answer)
+        else:
+            input_tokens = prompt
+            output_tokens = candidates + thoughts  # thinking tokens are billed as output
+
+        model_label = f"gemini/{self.model_name}"
+        cost = calculate_cost(model_label, input_tokens, output_tokens)
+        return LLMResult(answer, model_label, 0.0, input_tokens, output_tokens, cost)
+
+
+def _gemini_text(response) -> str:
+    try:
+        return response.text or ""
+    except Exception:
+        return ""
+
+
+def _gemini_error(exc: Exception) -> LLMError:
+    code = getattr(exc, "code", None)
+    if code == 429:
+        return LLMError("Gemini rate limit reached. Wait a minute and try again.", 429)
+    if code in (400, 401, 403, 404):
+        return LLMError("Gemini rejected the request. Check GEMINI_API_KEY and GEMINI_MODEL.", 500)
+    return LLMError("Gemini could not answer right now. Please try again.", 500)
 
 def get_llm_client(model: str = "auto", settings: Settings | None = None) -> LLMClient:
     settings = settings or get_settings()

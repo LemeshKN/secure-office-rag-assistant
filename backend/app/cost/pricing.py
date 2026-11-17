@@ -15,6 +15,8 @@ MODEL_PRICES: dict[str, ModelPrice] = {
     "gpt-4o-mini": ModelPrice(0.15, 0.60),
     "claude-3-5-sonnet-latest": ModelPrice(3.00, 15.00),
     "gemini-1.5-flash": ModelPrice(0.075, 0.30),
+    "gemini-3.5-flash-lite": ModelPrice(0.30, 2.50),
+    "gemini-3.8-flash": ModelPrice(0.75, 3.75),  # rises to 1.50 / 7.50 on 2027-01-01
     "llama3.1": ModelPrice(0.0, 0.0),
 }
 
