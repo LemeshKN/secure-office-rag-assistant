@@ -1,6 +1,7 @@
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
+from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.api import admin_routes, auth_routes, chat_routes, cost_admin_routes, cost_routes, document_routes, evaluation_routes, seat_routes
@@ -9,7 +10,7 @@ from app.config import get_settings
 from app.database import SessionLocal, init_db
 from app.api import conversation_routes
 from app.cost.seed import seed_cost_data
-
+from app.rag.llm_client import LLMError
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -27,6 +28,10 @@ async def lifespan(app: FastAPI):
 
 settings = get_settings()
 app = FastAPI(title=settings.app_name, version="0.1.0", lifespan=lifespan)
+
+@app.exception_handler(LLMError)
+async def llm_error_handler(request: Request, exc: LLMError) -> JSONResponse:
+    return JSONResponse(status_code=exc.status_code, content={"detail": str(exc)})
 
 origins = ["*"] if settings.cors_origins == "*" else [item.strip() for item in settings.cors_origins.split(",")]
 app.add_middleware(

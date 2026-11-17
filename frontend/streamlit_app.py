@@ -519,8 +519,13 @@ def upload_page() -> None:
         except Exception as exc:
             st.info(str(exc))
 
-MODEL_CHOICES = ["auto", "mock-small", "mock-large"]
-
+MODEL_CHOICES = [
+    "auto",
+    "mock-small",
+    "mock-large",
+    "gemini/gemini-3.5-flash-lite",
+    "gemini/gemini-3.8-flash",
+]
 
 def money(value: Any) -> str:
     return f"${float(value or 0):.4f}"

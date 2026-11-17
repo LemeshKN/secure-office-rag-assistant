@@ -222,12 +222,13 @@ def get_llm_client(model: str = "auto", settings: Settings | None = None) -> LLM
         except Exception:
             if requested != "auto":
                 raise
-    if provider in {"gemini"} and settings.gemini_api_key:
+    if provider == "gemini":
+        if not settings.gemini_api_key:
+            raise LLMError("Gemini is not set up on the server. Ask an admin to add GEMINI_API_KEY.", 400)
         try:
             return GeminiClient(settings, requested_model)
-        except Exception:
-            if requested != "auto":
-                raise
+        except Exception as exc:
+            raise LLMError("Gemini could not start. Check GEMINI_API_KEY and GEMINI_MODEL.", 500) from exc
     return MockLLMClient()
 
 
