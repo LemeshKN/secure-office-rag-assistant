@@ -30,6 +30,7 @@ services:
       SHORT_OUTPUT_TOKENS: ${SHORT_OUTPUT_TOKENS:-300}
       NEAR_BUDGET_RATIO: ${NEAR_BUDGET_RATIO:-0.20}
       REPEAT_WINDOW_DAYS: ${REPEAT_WINDOW_DAYS:-7}
+      ANONYMIZED_TELEMETRY: "False"
     volumes:
       - ./data:/app/data
     ports:
