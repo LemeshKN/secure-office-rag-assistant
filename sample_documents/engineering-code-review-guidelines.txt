@@ -1,0 +1,21 @@
+Engineering Code Review Guidelines
+
+Owner: Engineering Manager. Last updated: 3 October.
+
+Every change to the main branch needs a pull request. Direct pushes to main are blocked.
+
+Approvals: A pull request needs two approvals. One approval must come from a code owner of the changed folder.
+
+Size: Keep pull requests small. The target is under 400 changed lines. A larger change must be split, unless the tech lead grants a waiver.
+
+Response time: Reviewers must respond within one working day. If the reviewer is on leave, the author may ask another team member.
+
+Checks: Automated checks must pass before merge. The checks are unit tests, linting and a secret scan. New code needs at least 80 percent test coverage.
+
+Merging: Use squash merge. The commit title must start with a ticket ID, for example SUP-142.
+
+Hotfixes: A hotfix may merge with one approval. A second reviewer must review it within 24 hours after the merge.
+
+Review focus: Reviewers comment on correctness, security, readability and tests. They do not discuss style points that the linter already checks.
+
+Disagreements: If two rounds of comments do not settle a disagreement, the tech lead makes the final call.

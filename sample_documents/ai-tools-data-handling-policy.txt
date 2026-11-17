@@ -1,0 +1,20 @@
+AI Tools and Data Handling Policy
+
+Owner: IT Security. Applies to all employees who use AI assistants or AI APIs.
+
+Approved tools: The internal RAG assistant and the Gemini API through the company key are approved. Any other AI tool needs approval from IT Security first.
+
+Data classes: Public, Internal, Confidential and Restricted.
+Public and Internal data may go to an approved provider.
+Confidential data may go only to a provider on a paid plan with a signed data processing agreement and no training on company data.
+Restricted data must never go to an external AI tool.
+
+Never paste: Do not paste customer personal data, passwords, API keys or private keys into any external AI tool.
+
+API keys: Keep keys in the secrets manager. Rotate them every 90 days. Never commit a key to the repository. Report a leaked key within 1 hour and revoke it at once.
+
+Code: Treat AI-generated code like any other code. It needs a normal code review.
+
+Logs: Prompts and answers are logged for 90 days and then deleted.
+
+Budgets: Each team has a monthly AI budget set by Finance. The platform warns a user when a request would use 50 percent or more of the lowest remaining budget, and blocks the request when it would exceed it.

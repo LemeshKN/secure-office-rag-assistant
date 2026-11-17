@@ -1,0 +1,22 @@
+Engineering On-Call and Incident Runbook
+
+Owner: Platform Team. Applies to all engineers on the on-call rotation.
+
+Rotation: One primary and one secondary engineer are on call each week. The rotation changes every Monday at 10 AM.
+
+Acknowledgement: The on-call engineer must acknowledge a page within 15 minutes. If the primary does not acknowledge, the system pages the secondary. If the secondary does not acknowledge within 30 minutes, call the engineering manager.
+
+Severity levels:
+SEV1 means a full outage or a risk of data loss.
+SEV2 means a major feature is broken for many users.
+SEV3 means a minor issue that has a workaround.
+
+SEV1 steps: Open an incident channel named inc-YYYYMMDD. Tell the engineering manager within 10 minutes. Post a customer update every 30 minutes until the incident is resolved.
+
+SEV2 steps: Post an update every 2 hours.
+
+Rollback first: Roll back the last release before you debug forward. Use the deploy tool command rollback-last.
+
+Postmortem: The incident owner writes a blameless postmortem within 5 working days after every SEV1 and SEV2.
+
+Compensation: An engineer who is primary on call for a full week gets one day of compensatory time off.

@@ -1,0 +1,23 @@
+AI Model Evaluation Standards
+
+Owner: AI Lead. Applies to every change to a model, prompt or retrieval setting.
+
+Gate: No model or prompt change reaches production until it passes the offline evaluation set.
+
+Evaluation set: The golden set has 200 questions, each with a reference document. It lives in the repo folder eval/golden. Changes to the golden set need review by two people. Nobody edits it to make a result pass.
+
+Retrieval: The correct document must appear in the top 5 results for at least 85 percent of questions.
+
+Groundedness: The average groundedness score must be at least 0.80. No more than 5 percent of answers may contain an unsupported claim.
+
+Refusals: The set includes 30 questions that no document answers. The system must refuse at least 90 percent of them.
+
+Latency: The p95 latency for chat answers must stay under 6 seconds.
+
+Cost: The average cost per answer must not rise by more than 20 percent compared with the last release.
+
+Model changes: A model change needs a written comparison of the old and new model on the same set. The AI Lead reviews it.
+
+Tracking: Log each result in the experiment tracker with the commit hash.
+
+Human review: The AI team reviews a sample of 25 production answers every month.

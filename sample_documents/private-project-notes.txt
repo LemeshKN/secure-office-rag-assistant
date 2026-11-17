@@ -1,4 +1,13 @@
-Private Project Notes
+Private Project Notes: Apollo
 
-The internal budget review is scheduled for 15 December.
-Only authorized project members should access this information.
+Project Apollo is the internal tool that lets support staff search customer tickets. The project lead is Priya. The team has three engineers.
+
+Milestones: The first prototype is due on 15 December. The beta release is planned for 20 January. The final launch is planned for 28 February.
+
+Budget: The Apollo project has a cloud budget of 4,000 dollars for this quarter. About 1,200 dollars has been spent so far on servers and testing.
+
+Risks: The main risk is slow search on large ticket sets. The team plans to add caching and database indexes before the beta release. A second risk is that two engineers will be on leave during the last week of December.
+
+Decisions: The team chose PostgreSQL for storage. The team decided to hold a review meeting every Thursday at 10 AM.
+
+Next steps: Finish the search API by 5 December. Write the user guide by 10 January. Ask HR about hiring one more tester.

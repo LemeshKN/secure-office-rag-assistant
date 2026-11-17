@@ -1,0 +1,127 @@
+{
+  "note": "expected_file is the file that holds the answer. should_refuse questions are not answered by any document.",
+  "retrieval_questions": [
+    {
+      "id": 1,
+      "question": "How many approvals does a pull request need?",
+      "expected_file": "engineering-code-review-guidelines.txt"
+    },
+    {
+      "id": 2,
+      "question": "How quickly must the on-call engineer acknowledge a page?",
+      "expected_file": "engineering-oncall-incident-runbook.txt"
+    },
+    {
+      "id": 3,
+      "question": "During a full outage, should I roll back first or debug first?",
+      "expected_file": "engineering-oncall-incident-runbook.txt"
+    },
+    {
+      "id": 4,
+      "question": "What retrieval accuracy must a new model reach before release?",
+      "expected_file": "ai-model-evaluation-standards.txt"
+    },
+    {
+      "id": 5,
+      "question": "How many questions are in the golden evaluation set?",
+      "expected_file": "ai-model-evaluation-standards.txt"
+    },
+    {
+      "id": 6,
+      "question": "Can I paste customer passwords into an external AI tool?",
+      "expected_file": "ai-tools-data-handling-policy.txt"
+    },
+    {
+      "id": 7,
+      "question": "How often must API keys be rotated?",
+      "expected_file": "ai-tools-data-handling-policy.txt"
+    },
+    {
+      "id": 8,
+      "question": "When do performance reviews happen each year?",
+      "expected_file": "manager-performance-review-guide.txt"
+    },
+    {
+      "id": 9,
+      "question": "How long does a performance improvement plan last?",
+      "expected_file": "manager-performance-review-guide.txt"
+    },
+    {
+      "id": 10,
+      "question": "What are the steps in the interview process?",
+      "expected_file": "manager-hiring-interview-process.txt"
+    },
+    {
+      "id": 11,
+      "question": "How long does a job offer stay valid?",
+      "expected_file": "manager-hiring-interview-process.txt"
+    },
+    {
+      "id": 12,
+      "question": "How soon must I submit an expense claim?",
+      "expected_file": "hr-expense-travel-policy.txt"
+    },
+    {
+      "id": 13,
+      "question": "What is the hotel limit per night in major cities?",
+      "expected_file": "hr-expense-travel-policy.txt"
+    },
+    {
+      "id": 14,
+      "question": "How much is the yearly learning budget?",
+      "expected_file": "hr-expense-travel-policy.txt"
+    },
+    {
+      "id": 15,
+      "question": "How many characters must a password have?",
+      "expected_file": "it-security-access-policy.txt"
+    },
+    {
+      "id": 16,
+      "question": "How fast must I report a lost laptop?",
+      "expected_file": "it-security-access-policy.txt"
+    },
+    {
+      "id": 17,
+      "question": "How many paid leave days do employees get per year?",
+      "expected_file": "company-leave-policy.txt"
+    },
+    {
+      "id": 18,
+      "question": "Who provides my laptop and email access when I join?",
+      "expected_file": "hr-onboarding-guide.txt"
+    },
+    {
+      "id": 19,
+      "question": "When is the beta release of Project Apollo?",
+      "expected_file": "private-project-notes.txt"
+    },
+    {
+      "id": 20,
+      "question": "When is the MapleBridge final project review?",
+      "expected_file": "project-schedule.txt"
+    }
+  ],
+  "should_refuse": [
+    {
+      "id": 101,
+      "question": "What is the CEO's salary?"
+    },
+    {
+      "id": 102,
+      "question": "What is the password for the guest Wi-Fi?"
+    },
+    {
+      "id": 103,
+      "question": "How many days of parental leave do employees get?"
+    },
+    {
+      "id": 104,
+      "question": "What is the company's stock price today?"
+    },
+    {
+      "id": 105,
+      "question": "Which programming language does Project Apollo use?"
+    }
+  ]
+}

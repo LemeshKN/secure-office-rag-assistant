@@ -1,0 +1,17 @@
+Expense and Travel Policy
+
+Owner: Finance and HR. Applies to all employees.
+
+Claims: Submit an expense claim in the expense tool within 30 days of the expense. Attach receipts. A claim over 25 dollars without a receipt is rejected.
+
+Approval: A manager approves claims up to 500 dollars. A director approves claims above 500 dollars. Finance pays within 10 working days after approval.
+
+Flights: Book economy class for flights under 6 hours. Premium economy is allowed for flights over 6 hours with manager approval. Book at least 14 days ahead when possible.
+
+Hotels: The limit is 180 dollars per night in major cities and 120 dollars per night elsewhere.
+
+Meals: The allowance is 50 dollars per day while traveling. Alcohol is not reimbursed.
+
+Learning budget: Each employee has 800 dollars per year for courses and conferences. The manager must approve each request.
+
+Home office: Remote employees get a one-time 300 dollars for equipment.

@@ -1,0 +1,21 @@
+IT Security and Access Policy
+
+Owner: IT Security. Applies to all employees and contractors.
+
+Passwords: Passwords must have at least 14 characters. Use the company password manager. Multi-factor authentication is mandatory on every company account.
+
+Laptops: Disk encryption must be on. The screen locks after 5 minutes. Report a lost or stolen device to IT within 2 hours.
+
+Access requests: Submit requests through the IT service desk. The manager approves them. IT grants access for new joiners within 1 working day.
+
+Access reviews: Managers review team access every quarter. IT disables accounts that are unused for 60 days.
+
+Offboarding: IT removes all access on the employee's last working day by 6 PM.
+
+Production access: Only on-call engineers and the platform team have production access. Each session is logged and expires after 4 hours.
+
+Phishing: Report suspicious email with the Report Phish button. The security team responds within 4 hours.
+
+Guest Wi-Fi: Use the guest network for personal devices only.
+
+Training: Everyone completes security training within 30 days of joining and then once a year.
