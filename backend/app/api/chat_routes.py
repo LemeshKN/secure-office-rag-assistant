@@ -14,11 +14,12 @@ from app.rag.workflow_factory import build_workflow
 from app.schemas import ChatRequest, ChatResponse
 from fastapi.responses import JSONResponse, StreamingResponse
 from app.cost.governed import run_governed
+from app.rate_limit import rate_limit_chat
 
 router = APIRouter(tags=["chat"])
 
 
-@router.post("/chat", response_model=ChatResponse)
+@router.post("/chat", response_model=ChatResponse, dependencies=[Depends(rate_limit_chat)])
 def chat(
     request: ChatRequest,
     current_user: Annotated[User, Depends(get_current_user)],
@@ -44,7 +45,7 @@ def run_rag_request(
     return workflow.run(question, top_k)
 
 
-@router.post("/conversations/{conversation_id}/messages/stream")
+@router.post("/conversations/{conversation_id}/messages/stream", dependencies=[Depends(rate_limit_chat)])
 def stream_message(
     conversation_id: int,
     request: ChatRequest,

@@ -2,7 +2,7 @@ from sqlalchemy.orm import Session
 
 from app.auth.security import get_password_hash, verify_password
 from app.models import ReportingRelationship, User
-
+from app.config import get_settings
 
 DEFAULT_USERS = [
     {"username": "admin", "password": "admin123", "role": "admin"},
@@ -19,6 +19,7 @@ DEFAULT_REPORTING = [
 
 
 def create_default_users(db: Session) -> None:
+    admin_password = get_settings().admin_password
     for user_data in DEFAULT_USERS:
         existing = db.query(User).filter(User.username == user_data["username"]).first()
         if existing:
@@ -26,7 +27,9 @@ def create_default_users(db: Session) -> None:
         db.add(
             User(
                 username=user_data["username"],
-                password_hash=get_password_hash(user_data["password"]),
+                password_hash=get_password_hash(
+                    admin_password if user_data["username"] == "admin" else user_data["password"]
+                ),
                 role=user_data["role"],
             )
         )

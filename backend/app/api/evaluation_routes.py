@@ -11,12 +11,12 @@ from app.models import User
 from app.rag.evaluator import retrieval_precision
 from app.retrieval.hybrid_retriever import RetrievedChunk
 from app.schemas import EvaluationRequest, EvaluationResponse
-
+from app.rate_limit import rate_limit_chat
 
 router = APIRouter(prefix="/evaluate", tags=["evaluation"])
 
 
-@router.post("/query", response_model=EvaluationResponse)
+@router.post("/query", response_model=EvaluationResponse, dependencies=[Depends(rate_limit_chat)])
 def evaluate_query(
     request: EvaluationRequest,
     current_user: Annotated[User, Depends(get_current_user)],

@@ -34,6 +34,11 @@ services:
       ANONYMIZED_TELEMETRY: "False"
       SEED_SAMPLE_DOCUMENTS: ${SEED_SAMPLE_DOCUMENTS:-true}
       SAMPLE_DOCUMENTS_DIR: /app/sample_documents
+      ENVIRONMENT: ${ENVIRONMENT:-local}
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD:-admin123}
+      RATE_LIMIT_CHAT_PER_MINUTE: ${RATE_LIMIT_CHAT_PER_MINUTE:-10}
+      RATE_LIMIT_ESTIMATE_PER_MINUTE: ${RATE_LIMIT_ESTIMATE_PER_MINUTE:-20}
+      RATE_LIMIT_UPLOAD_PER_HOUR: ${RATE_LIMIT_UPLOAD_PER_HOUR:-10}
     volumes:
       - ./data:/app/data
       - ./sample_documents:/app/sample_documents:ro
@@ -45,6 +50,7 @@ services:
       context: ./frontend
     environment:
       BACKEND_URL: http://backend:8000
+      PUBLIC_DEMO: ${PUBLIC_DEMO:-false}
     depends_on:
       - backend
     ports:

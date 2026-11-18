@@ -4,6 +4,8 @@ os.environ["EMBEDDING_PROVIDER"] = "hash"
 os.environ["EVIDENCE_THRESHOLD"] = "0.45"
 os.environ["GEMINI_API_KEY"] = ""
 os.environ["SEED_SAMPLE_DOCUMENTS"] = "false"
+os.environ["ENVIRONMENT"] = "local"
+os.environ["ADMIN_PASSWORD"] = "admin123"
 
 import pytest
 from fastapi.testclient import TestClient
@@ -69,3 +71,9 @@ def auth_headers():
         return {"Authorization": f"Bearer {token}"}
 
     return build
+
+@pytest.fixture(autouse=True)
+def reset_rate_limits():
+    from app.rate_limit import limiter
+
+    limiter.reset()

@@ -17,6 +17,7 @@ from app.ingestion.sample_seed import seed_sample_documents
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     settings = get_settings()
+    settings.check_production_safety()
     settings.ensure_directories()
     init_db()
     db = SessionLocal()
@@ -30,7 +31,15 @@ async def lifespan(app: FastAPI):
 
 
 settings = get_settings()
-app = FastAPI(title=settings.app_name, version="0.1.0", lifespan=lifespan)
+is_production = settings.environment.lower() == "production"
+app = FastAPI(
+    title=settings.app_name,
+    version="0.1.0",
+    lifespan=lifespan,
+    docs_url=None if is_production else "/docs",
+    redoc_url=None if is_production else "/redoc",
+    openapi_url=None if is_production else "/openapi.json",
+)
 
 @app.exception_handler(LLMError)
 async def llm_error_handler(request: Request, exc: LLMError) -> JSONResponse:

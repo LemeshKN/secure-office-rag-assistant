@@ -9,7 +9,8 @@ import streamlit as st
 import altair as alt
 
 BACKEND_URL = os.getenv("BACKEND_URL", "http://localhost:8000").rstrip("/")
-
+PUBLIC_DEMO = os.getenv("PUBLIC_DEMO", "false").lower() == "true"
+DEFAULT_LOGIN = ("priya", "priya123") if PUBLIC_DEMO else ("admin", "admin123")
 
 st.set_page_config(
     page_title="Enterprise RAG Agent Platform",
@@ -386,9 +387,15 @@ def login_page() -> None:
         if flash:
             st.warning(flash)
 
+        if PUBLIC_DEMO:
+            st.caption(
+                "Demo accounts: priya (developer), amit (manager), khushi (hr), lemesh (agent developer). "
+                "The password is the username followed by 123. "
+            )
+
         with st.form("login-form"):
-            username = st.text_input("Username", value="admin")
-            password = st.text_input("Password", type="password", value="admin123")
+            username = st.text_input("Username", value=DEFAULT_LOGIN[0])
+            password = st.text_input("Password", type="password", value=DEFAULT_LOGIN[1])
             submitted = st.form_submit_button("Sign in", use_container_width=True)
 
         if submitted:
@@ -420,6 +427,8 @@ def upload_page() -> None:
     require_login()
     st.markdown("# Upload Documents")
     st.caption("Upload and manage documents for your knowledge base")
+    if PUBLIC_DEMO:
+        st.warning("Public demo: upload only sample or public files. The text is sent to Google for processing.")
 
     try:
         manager_info = request_json(

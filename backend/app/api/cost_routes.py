@@ -13,6 +13,7 @@ from app.schemas import EstimateRequest, EstimateResponse
 from app.cost.recommendations import build_recommendations, apply_recommend_decision
 from app.cost.access import check_project_access
 from app.cost.budget_period import current_month_start, is_stale, remaining_amount
+from app.rate_limit import rate_limit_estimate
 
 router = APIRouter(prefix="/cost", tags=["cost"])
 
@@ -68,7 +69,7 @@ def my_cost_profile(
     }
 
 
-@router.post("/estimate", response_model=EstimateResponse)
+@router.post("/estimate", response_model=EstimateResponse, dependencies=[Depends(rate_limit_estimate)])
 def estimate(
     request: EstimateRequest,
     current_user: Annotated[User, Depends(get_current_user)],

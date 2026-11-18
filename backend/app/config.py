@@ -51,6 +51,10 @@ class Settings(BaseSettings):
     max_upload_mb: int = 10
     seed_sample_documents: bool = True
     sample_documents_dir: str = ""
+    admin_password: str = "admin123"
+    rate_limit_chat_per_minute: int = 10
+    rate_limit_estimate_per_minute: int = 20
+    rate_limit_upload_per_hour: int = 10
     warn_threshold: float = 0.50
     large_context_tokens: int = 3000
     recommended_top_k: int = 3
@@ -94,6 +98,17 @@ class Settings(BaseSettings):
         self.chroma_path.mkdir(parents=True, exist_ok=True)
         self.sqlite_path.mkdir(parents=True, exist_ok=True)
 
+    def check_production_safety(self) -> None:
+        """Refuse to start a production server with the default secrets."""
+        if self.environment.lower() != "production":
+            return
+        problems = []
+        if self.secret_key == "change-me-in-production" or len(self.secret_key) < 32:
+            problems.append("SECRET_KEY (at least 32 characters)")
+        if self.admin_password == "admin123":
+            problems.append("ADMIN_PASSWORD")
+        if problems:
+            raise RuntimeError("Set " + " and ".join(problems) + " before running in production.")
 
 @lru_cache
 def get_settings() -> Settings:

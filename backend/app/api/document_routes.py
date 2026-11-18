@@ -11,12 +11,11 @@ from app.ingestion.ingest_service import IngestService
 from app.models import Document, ReportingRelationship, User
 from app.schemas import DocumentOut, UploadResponse
 from app.config import get_settings
-
+from app.rate_limit import rate_limit_upload
 
 router = APIRouter(prefix="/documents", tags=["documents"])
 
-@router.post("/upload", response_model=UploadResponse, status_code=status.HTTP_201_CREATED)
-
+@router.post("/upload", response_model=UploadResponse, status_code=status.HTTP_201_CREATED, dependencies=[Depends(rate_limit_upload)])
 async def upload_document(
     current_user: Annotated[User, Depends(get_current_user)],
     db: Annotated[Session, Depends(get_db)],

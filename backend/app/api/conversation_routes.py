@@ -11,7 +11,7 @@ from app.models import ChatMessage, Conversation, User
 from fastapi.responses import JSONResponse
 from app.cost.governed import run_governed
 from app.schemas import ChatRequest, ChatResponse
-
+from app.rate_limit import rate_limit_chat
 
 router = APIRouter(
     prefix="/conversations",
@@ -103,6 +103,7 @@ def list_messages(
 @router.post(
     "/{conversation_id}/messages",
     response_model=ChatResponse,
+    dependencies=[Depends(rate_limit_chat)],
 )
 def send_message(
     conversation_id: int,
