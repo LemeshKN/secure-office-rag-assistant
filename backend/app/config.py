@@ -74,6 +74,13 @@ class Settings(BaseSettings):
         return self.data_path / "sqlite"
 
     @property
+    def vector_collection(self) -> str:
+        """Chroma collection for the active embedding setup. Gemini vectors never share one with hash vectors."""
+        if self.embedding_provider.lower() == "gemini":
+            return f"{self.chroma_collection}_{self.gemini_embedding_model}_{self.gemini_embedding_dimensions}"
+        return self.chroma_collection
+
+    @property
     def resolved_database_url(self) -> str:
         if self.database_url:
             return self.database_url

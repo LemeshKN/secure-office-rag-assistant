@@ -1,3 +1,9 @@
+import os
+
+os.environ["EMBEDDING_PROVIDER"] = "hash"
+os.environ["EVIDENCE_THRESHOLD"] = "0.45"
+os.environ["GEMINI_API_KEY"] = ""
+
 import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy import create_engine

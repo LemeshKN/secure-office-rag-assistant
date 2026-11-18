@@ -71,9 +71,9 @@ class ChromaVectorStore:
             import chromadb
 
             self.client = chromadb.PersistentClient(path=str(self.settings.chroma_path))
-            self.collection = self.client.get_or_create_collection(self.settings.chroma_collection)
+            self.collection = self.client.get_or_create_collection(self.settings.vector_collection)
         except Exception:
-            self._fallback = InMemoryVectorStore(self.settings.chroma_collection)
+            self._fallback = InMemoryVectorStore(self.settings.vector_collection)
 
     def upsert(self, records: list[VectorRecord]) -> None:
         if not records:
