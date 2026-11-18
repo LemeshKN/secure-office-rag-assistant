@@ -1,7 +1,8 @@
 services:
   backend:
     build:
-      context: ./backend
+      context: .
+      dockerfile: backend/Dockerfile
     environment:
       DATA_DIR: /app/data
       SECRET_KEY: ${SECRET_KEY:-change-me-in-production}
@@ -41,9 +42,9 @@ services:
       RATE_LIMIT_UPLOAD_PER_HOUR: ${RATE_LIMIT_UPLOAD_PER_HOUR:-10}
     volumes:
       - ./data:/app/data
-      - ./sample_documents:/app/sample_documents:ro
     ports:
       - "8000:8000"
+
 
   frontend:
     build:
