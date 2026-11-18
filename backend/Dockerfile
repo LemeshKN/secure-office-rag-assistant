@@ -8,14 +8,10 @@ WORKDIR /app
 
 RUN apt-get update && apt-get install -y --no-install-recommends build-essential curl && rm -rf /var/lib/apt/lists/*
 
-COPY backend/requirements.txt .
+COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-COPY backend/app ./app
-COPY sample_documents ./sample_documents
-ENV SAMPLE_DOCUMENTS_DIR=/app/sample_documents
+COPY app ./app
 
 EXPOSE 8000
-# Render injects $PORT; fall back to 8000 for docker-compose/local runs.
 CMD ["sh", "-c", "uvicorn app.main:app --host 0.0.0.0 --port ${PORT:-8000}"]
-
