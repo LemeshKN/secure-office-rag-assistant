@@ -32,8 +32,11 @@ services:
       NEAR_BUDGET_RATIO: ${NEAR_BUDGET_RATIO:-0.20}
       REPEAT_WINDOW_DAYS: ${REPEAT_WINDOW_DAYS:-7}
       ANONYMIZED_TELEMETRY: "False"
+      SEED_SAMPLE_DOCUMENTS: ${SEED_SAMPLE_DOCUMENTS:-true}
+      SAMPLE_DOCUMENTS_DIR: /app/sample_documents
     volumes:
       - ./data:/app/data
+      - ./sample_documents:/app/sample_documents:ro
     ports:
       - "8000:8000"
 

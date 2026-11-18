@@ -3,6 +3,7 @@ import os
 os.environ["EMBEDDING_PROVIDER"] = "hash"
 os.environ["EVIDENCE_THRESHOLD"] = "0.45"
 os.environ["GEMINI_API_KEY"] = ""
+os.environ["SEED_SAMPLE_DOCUMENTS"] = "false"
 
 import pytest
 from fastapi.testclient import TestClient

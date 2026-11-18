@@ -12,6 +12,7 @@ from app.api import conversation_routes
 from app.cost.seed import seed_cost_data
 from app.rag.llm_client import LLMError
 from app.ingestion.embeddings import EmbeddingError
+from app.ingestion.sample_seed import seed_sample_documents
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -22,6 +23,7 @@ async def lifespan(app: FastAPI):
     try:
         create_default_users(db)
         seed_cost_data(db)
+        seed_sample_documents(db)
     finally:
         db.close()
     yield

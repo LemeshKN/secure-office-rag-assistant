@@ -351,6 +351,12 @@ Admin can see every document in RAG answers, including private notes. This is in
 
 Admin uploads a CSV of AI seats and sets seat prices. The page shows unused seats, inactive seats, premium seats to downgrade and the potential monthly saving. It uses demo data only and saves nothing.
 
+## Sample documents and data on a free host
+
+On startup the app loads the files from `sample_documents/` that are not in the database yet. Restarting never creates duplicates.
+
+Free hosts such as Render's free plan can erase the disk when the service restarts or sleeps. After that, uploads, chats, cost history and the vector index may be gone, and the sample documents are loaded again at the next start. The first request after a sleep can take a minute.
+
 ## Streaming Responses
 
 Chat answers are streamed word by word using Server-Sent Events (SSE).
