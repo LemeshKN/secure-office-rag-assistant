@@ -391,6 +391,7 @@ def login_page() -> None:
             st.caption(
                 "Demo accounts: priya (developer), amit (manager), khushi (hr), lemesh (agent developer). "
                 "The password is the username followed by 123. "
+                "admin (full access and cost dashboard), password: RagDemo2026!"
             )
 
         with st.form("login-form"):
