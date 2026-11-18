@@ -48,6 +48,7 @@ class Settings(BaseSettings):
     enable_cross_encoder: bool = False
     evidence_threshold: float = 0.45
     max_output_tokens: int = 800
+    max_upload_mb: int = 10
     warn_threshold: float = 0.50
     large_context_tokens: int = 3000
     recommended_top_k: int = 3

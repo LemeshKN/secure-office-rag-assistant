@@ -10,6 +10,7 @@ from app.database import get_db
 from app.ingestion.ingest_service import IngestService
 from app.models import Document, ReportingRelationship, User
 from app.schemas import DocumentOut, UploadResponse
+from app.config import get_settings
 
 
 router = APIRouter(prefix="/documents", tags=["documents"])
@@ -26,6 +27,14 @@ async def upload_document(
     share_with_manager: bool = Form(False),
 ) -> UploadResponse:
     try:
+        max_bytes = get_settings().max_upload_mb * 1024 * 1024
+        content = await file.read(max_bytes + 1)
+        if len(content) > max_bytes:
+            raise HTTPException(
+                status_code=413,
+                detail=f"File is too large. The limit is {get_settings().max_upload_mb} MB.",
+            )
+        
         roles = normalize_roles(_parse_list(allowed_roles))
         user_ids = normalize_user_ids(_parse_list(allowed_user_ids))
 
@@ -50,8 +59,6 @@ async def upload_document(
             if manager.id not in user_ids:
                 user_ids.append(manager.id)
 
-        # Read file contents asynchronously
-        content = await file.read()
 
         # Ingest document data into the RAG platform database
         document, chunks_created = IngestService().ingest_bytes(

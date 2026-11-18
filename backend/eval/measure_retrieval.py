@@ -11,6 +11,7 @@ import json
 import os
 import sys
 import tempfile
+from functools import partial
 from pathlib import Path
 
 BACKEND = Path(__file__).resolve().parents[1]
@@ -32,6 +33,10 @@ from app.retrieval.keyword_store import KeywordStore  # noqa: E402
 from app.retrieval.reranker import Reranker  # noqa: E402
 from app.retrieval.vector_store import ChromaVectorStore  # noqa: E402
 
+import app.ingestion.ingest_service as ingest_module  # noqa: E402
+from app.ingestion.chunking import split_text_blocks  # noqa: E402
+from app.models import Chunk  # noqa: E402
+
 SAMPLE_DIR = BACKEND.parent / "sample_documents"
 QUESTIONS = Path(__file__).with_name("retrieval_questions.json")
 ALL_ROLES = ["admin", "agent_developer", "developer", "manager", "hr"]
@@ -43,6 +48,8 @@ def main() -> None:
     parser.add_argument("--embedding", default="hash")
     parser.add_argument("--top-k", type=int, default=5)
     parser.add_argument("--verbose", action="store_true")
+    parser.add_argument("--chunk-size", type=int, default=3000)
+    parser.add_argument("--overlap", type=int, default=500)
     args = parser.parse_args()
 
     data = json.loads(QUESTIONS.read_text(encoding="utf-8"))
@@ -64,6 +71,10 @@ def main() -> None:
         if store._fallback is not None:
             raise SystemExit("Chroma is not available, so the scores would not match the real app.")
 
+        ingest_module.split_text_blocks = partial(
+            split_text_blocks, chunk_size_chars=args.chunk_size, overlap_chars=args.overlap
+        )
+
         ingest = IngestService(settings, embeddings, store)
         for path in sorted(SAMPLE_DIR.glob("*.txt")):
             ingest.ingest_bytes(db, admin, path.name, path.read_bytes(), None, ALL_ROLES)
@@ -78,6 +89,7 @@ def main() -> None:
 
         print(f"Embedding: {args.embedding} ({embeddings.model_name}), store: Chroma")
         print(f"Evidence threshold now: {settings.evidence_threshold}")
+        print(f"Chunk size {args.chunk_size}, overlap {args.overlap}, chunks stored: {db.query(Chunk).count()}")
 
         hits = 0
         answer_scores: list[float] = []
