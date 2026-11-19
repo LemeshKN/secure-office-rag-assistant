@@ -376,7 +376,7 @@ def request_json(method: str, path: str, **kwargs: Any) -> Any:
 # ─────────────────────────────────────────────────────────────────────────────
 
 def login_page() -> None:
-    col_left, col_center, col_right = st.columns([1.2, 1, 1.2])
+    col_left, col_center, col_right = st.columns([0.5, 2, 0.5])
     with col_center:
         st.markdown("")
         st.markdown("")
@@ -388,10 +388,11 @@ def login_page() -> None:
             st.warning(flash)
 
         if PUBLIC_DEMO:
-            st.caption(
-                "Demo accounts: priya (developer), amit (manager), khushi (hr), lemesh (agent developer). "
+            st.info(
+                "Demo accounts: priya (developer), amit (manager), "
+                "khushi (hr), lemesh (agent developer). "
                 "The password is the username followed by 123. "
-                "admin (full access and cost dashboard), password: RagDemo2026!"
+                "admin (full access and cost dashboard), password: RagDemo2026"
             )
 
         with st.form("login-form"):
