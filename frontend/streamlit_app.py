@@ -19,6 +19,51 @@ st.set_page_config(
 )
 
 # ─────────────────────────────────────────────────────────────────────────────
+# Shared HTTP session (defined first so _restore_session_from_url can use it)
+# ─────────────────────────────────────────────────────────────────────────────
+
+@st.cache_resource
+def backend_session() -> requests.Session:
+    return requests.Session()
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Token persistence — restore session from URL on tab-switch / refresh
+# ─────────────────────────────────────────────────────────────────────────────
+
+def _restore_session_from_url() -> None:
+    """
+    If the URL contains ?token=... and session_state has no token yet,
+    verify the token with the backend and restore the session silently.
+    Called once per page run, before any page is rendered.
+    """
+    if st.session_state.get("token"):
+        return                          # already logged in, nothing to do
+    url_token = st.query_params.get("token")
+    if not url_token:
+        return                          # no token in URL, show login normally
+    try:
+        resp = backend_session().get(
+            f"{BACKEND_URL}/auth/me",
+            headers={"Authorization": f"Bearer {url_token}"},
+            timeout=10,
+        )
+        if resp.status_code == 200:
+            data = resp.json()
+            st.session_state["token"]    = url_token
+            st.session_state["username"] = data.get("username", "")
+            st.session_state["role"]     = data.get("role", "")
+            st.session_state["user_id"]  = data.get("user_id")
+        else:
+            # Token expired or invalid — clear URL so login page shows cleanly
+            st.query_params.clear()
+    except Exception:
+        # Backend unreachable — clear URL token, show login page
+        st.query_params.clear()
+
+_restore_session_from_url()
+
+# ─────────────────────────────────────────────────────────────────────────────
 # Custom CSS — Clean Professional Dark Theme
 # ─────────────────────────────────────────────────────────────────────────────
 
@@ -293,11 +338,6 @@ def api_headers() -> dict[str, str]:
     return {"Authorization": f"Bearer {token}"} if token else {}
 
 
-@st.cache_resource
-def backend_session() -> requests.Session:
-    return requests.Session()
-
-
 # Render returns 502/503 while the backend is waking up or restarting,
 # so retry a few times before reporting the backend as unavailable.
 RETRY_STATUS_CODES = (502, 503)
@@ -310,6 +350,7 @@ class BackendError(RuntimeError):
 
 def sign_out(message: str | None = None) -> None:
     st.session_state.clear()
+    st.query_params.clear()          # remove token from URL so login shows clean
     if message:
         st.session_state["flash"] = message
     st.rerun()
@@ -422,6 +463,7 @@ def login_page() -> None:
             st.session_state["username"] = data.get("username", username.strip())
             st.session_state["role"] = data.get("role", "")
             st.session_state["user_id"] = data.get("user_id")
+            st.query_params["token"] = token   # persist across tab switches
             st.rerun()
 
 
