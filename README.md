@@ -9,6 +9,27 @@ The project focuses on the parts that make an enterprise GenAI platform practica
 > Refresh once if it times out.
 
 
+## Screenshots
+
+### Login page
+![Login](docs/screenshots/01-login.png)
+
+### Chat answer with citations
+![Chat](docs/screenshots/02-chat-answer.png)
+
+### Cost governance card
+![Cost card](docs/screenshots/03-cost-card.png)
+
+### Admin cost dashboard
+![Dashboard](docs/screenshots/04-cost-dashboard.png)
+
+### Admin logs
+![Admin logs](docs/screenshots/05-admin-logs.png)
+
+### Documents
+![Documents](docs/screenshots/06-documents.png)
+
+
 ## Demo accounts
 
 | Username | Role | Password | Can see |
