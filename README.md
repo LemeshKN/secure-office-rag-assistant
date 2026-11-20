@@ -1,37 +1,42 @@
-# Enterprise RAG Agent Platform
+# Enterprise RAG Agent Platform with AI Cost Governance
 
-This is a backend-first Enterprise RAG project with document upload, role-based access control, user-specific sharing, manager sharing, conversation history, citation-grounded answers, evidence checks, query logging, evaluation metrics, word-by-word streaming responses, and a Streamlit UI.
+An internal AI assistant for private company documents with built-in cost governance. Employees ask questions and get answers grounded only in documents they are allowed to access. Every answer carries a source citation. Before every request, the system estimates the cost, checks budgets, and warns or blocks expensive requests. Weak evidence leads to a refusal instead of a confident-looking guess.
 
-The goal was not to build another chatbot demo. This project focuses on the parts that make an internal GenAI platform practical: private documents, permission-aware retrieval, refusal when evidence is weak, citations that point back to source chunks, saved conversations, and logs that make quality measurable.
+The project focuses on the parts that make an enterprise GenAI platform practical: permission-aware retrieval, evidence-based refusal, citations that point back to source chunks, pre-flight cost estimation, budget policy enforcement, estimated-versus-actual cost tracking, and logs that make quality measurable.
 
-## Documentation
+> **Live demo:** https://rag-frontend-fz8s.onrender.com
+> Hosted on Render free tier. May take up to 60 seconds to wake up on the first visit.
+> Refresh once if it times out.
 
-For detailed local setup, Docker deployment, environment variables, privacy testing, sample documents, and production recommendations, see [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md).
-## Demo Screenshots
 
-.Screenshots to add in `docs/screenshots/`:
+## Demo accounts
 
-- Chat page with the project and model dropdowns
-- Recommend card (Accept recommendation, Run anyway, Cancel)
-- Warn card
-- Block card (Cancel only)
-- Answer with `[doc_id:chunk_id]` citations
-- Cost Dashboard: totals, breakdown tabs, trends, budget utilization
-- Estimated vs actual panel
-- Admin Logs with token and cost columns
-- Seat Utilization results from the sample CSV
-- `docker compose up` running in the terminal
+| Username | Role | Password | Can see |
+|---|---|---|---|
+| priya | Developer | priya123 | Engineering docs, Apollo project notes |
+| amit | Manager | amit123 | Manager guides, HR docs, shared docs |
+| khushi | HR | khushi123 | HR documents |
+| lemesh | Agent developer | lemesh123 | Engineering documents |
+| admin | Admin | RagDemo2026 | All documents, cost dashboard, admin logs |
 
-## What This Project Shows
+Uploads are shared across demo accounts. Use only public or sample files. Text is sent to Google for processing on the free tier.
 
-Most RAG demos skip the parts that make enterprise systems hard. This project focuses on those parts:
 
-- Retrieval is filtered by permissions before chunks reach the LLM.
-- Streamlit is only a frontend. The backend owns ingestion, retrieval, auth, logging, generation, and evaluation.
-- Answers include source citations like `[doc_id:chunk_id]`.
-- Weak evidence leads to a refusal instead of a confident-looking guess.
-- Queries are logged with latency, model name, retrieved chunks, citations, evidence score, and groundedness score.
-- The app can run without paid API keys by using local or fallback embeddings and a mock grounded LLM.
+## What this project shows
+
+Most RAG demos skip the parts that make enterprise systems hard. This project focuses on those parts.
+
+| Area | What is built |
+|---|---|
+| Permission-aware retrieval | The permission filter runs before vector search and keyword search. Private chunks are never retrieved and filtered after the fact. |
+| Evidence-based refusal | If the retrieved evidence is too weak, the system refuses instead of guessing. |
+| Source citations | Every factual claim carries a `[doc_id:chunk_id]` citation. The Sources box shows the filename, page and excerpt. |
+| Cost governance | Before every LLM call, the server estimates the cost, checks user, department and project budgets, and returns allow, warn, recommend or block. The browser never decides. |
+| Estimated vs actual | After each request, actual token counts (from Gemini's usage report) are saved and compared with the estimate. |
+| Audit logs | Every query is logged with latency, model name, retrieved chunks, citations, evidence score, groundedness score, estimated cost and actual cost. |
+| Role-based access | Five roles: admin, agent_developer, developer, manager, hr. Documents are shared by role, by user ID, or by manager relationship. |
+| Streaming responses | Answers stream word by word using Server-Sent Events. |
+
 
 ## Architecture
 
@@ -40,46 +45,108 @@ flowchart LR
     User["User"] --> UI["Streamlit UI"]
     UI --> API["FastAPI backend"]
     API --> Auth["JWT auth + RBAC"]
-    API --> Ingest["Document ingestion"]
-    Ingest --> SQLite["SQLite metadata, budgets, usage, logs"]
-    Ingest --> Chroma["ChromaDB vector store"]
-    API --> Gov["Governed run"]
-    Gov --> Est["Pre-flight estimate (no LLM call)"]
-    Est --> Hybrid["Permission-filtered hybrid retriever"]
-    Hybrid --> Chroma
-    Gov --> Policy["Budget check and policy"]
-    Policy --> SQLite
-    Gov --> Graph["LangGraph RAG workflow"]
-    Graph --> LLM["Mock / OpenAI-compatible / Ollama LLM"]
-    Gov --> SQLite
-    API --> Dash["Admin cost dashboard and seat demo"]
+    API --> Gov["run_governed"]
+    Gov --> Est["Pre-flight estimate\n(no LLM call)"]
+    Est --> Retriever["Permission-filtered\nhybrid retriever"]
+    Retriever --> Chroma["ChromaDB\nvector store"]
+    Retriever --> BM25["BM25\nkeyword store"]
+    Gov --> Policy["Budget check\nand policy"]
+    Policy --> SQLite["SQLite\nmetadata, budgets,\nusage, logs"]
+    Gov --> Graph["LangGraph\nRAG workflow"]
+    Graph --> Gemini["Gemini\n3.5 Flash Lite"]
+    API --> Ingest["Document ingestion\nand embedding"]
+    Ingest --> Chroma
+    Ingest --> SQLite
+    API --> Dash["Admin cost dashboard\nand seat demo"]
     Dash --> SQLite
 ```
 
-The main rule is simple: **private chunks should never be retrieved and then filtered after the fact**. Vector search uses Chroma metadata filters, and keyword search builds its BM25 corpus only from documents the user is allowed to access. The hybrid retriever also performs a final authorization check before anything is sent into the RAG workflow.
+The core rule: **private chunks are never retrieved and then filtered after the fact.** Vector search uses Chroma metadata filters. BM25 builds its corpus only from documents the user can access. The hybrid retriever also runs a final access check before anything reaches the RAG workflow.
 
-## Core Features
+
+---
+
+
+## Tech stack
+
+| Layer | Technology |
+|---|---|
+| Frontend | Streamlit, deployed on Render |
+| Backend | FastAPI, deployed on Render |
+| Database | SQLite with SQLAlchemy (create_all, no migrations) |
+| Vector store | ChromaDB with persistent storage |
+| Embeddings | Gemini Embedding 001, 768 dimensions |
+| LLM | Gemini 3.5 Flash Lite |
+| AI workflow | LangGraph |
+| Keyword search | BM25 via rank-bm25 |
+| Auth | JWT bearer tokens, bcrypt passwords |
+| Tests | pytest, 180 tests |
+| Containers | Docker Compose |
+
+
+## Retrieval results
+
+Measured on 20 questions across 12 realistic office documents, using Chroma as the vector store.
+
+| Metric | Hash embeddings | Gemini embeddings |
+|---|---|---|
+| Correct document in top 5 | 20 of 20 | 20 of 20 |
+| Real questions answered | 20 of 20 | 20 of 20 |
+| Unanswerable questions refused by threshold | 0 of 5 | 2 of 5 |
+
+The remaining 3 unanswerable questions are caught by Gemini's own "not enough information" reply. Hash embeddings answer all real questions but cannot refuse unrelated ones at the same threshold. Gemini embeddings handle both.
+
+
+## Features
+
+### RAG and document management
 
 - Demo JWT authentication with admin, manager, employee, and guest users
-- Document upload for PDF, DOCX, TXT, Markdown, and CSV
-- SQLite metadata storage for users, documents, chunks, and query logs
-- ChromaDB persistent vector storage
-- Hybrid retrieval with vector search plus BM25 keyword search
-- Optional reranking with a cross-encoder when installed
-- LangGraph workflow for retrieve, rerank, evidence check, generation, grounding, and final response
-- Citation formatting with document ID, chunk ID, filename, page number, excerpt, and relevance score
-- Deterministic evidence and grounding checks
+- Upload PDF, DOCX, TXT, Markdown and CSV files (10 MB limit)
+- Documents split into overlapping chunks (3,000 chars, 500 overlap) and embedded with Gemini
+- Hybrid retrieval: vector search plus BM25 keyword search, combined score 65/35
+- Optional cross-encoder reranking
+- Evidence score check before every LLM call. Weak evidence returns a refusal, no LLM call made
+- Groundedness check on every answer
+- Citation format `[doc_id:chunk_id]` with filename, page, excerpt and relevance score
 - Conversation history with strict per-user isolation
-- Role-based document sharing
-- User-specific document sharing
-- Manager-based document sharing
-- Word-by-word streaming chat responses using Server-Sent Events
-- Admin-only query log endpoint
-- Evaluation endpoint for retrieval precision and quality metrics
-- Docker and local development support
-- pytest coverage for RBAC, ingestion, retrieval permissions, citations, evidence refusal, and admin logs
+- Word-by-word streaming via Server-Sent Events
+- Evaluation endpoint for retrieval precision
 
-## User Hierarchy
+### Cost governance
+
+- Pre-flight estimate: input tokens (characters / 4) plus output limit, priced from the model's rate table
+- Budget check across user, department and project budgets. The lowest remaining amount decides
+- Policy decisions: **allow** (runs at once), **warn** (50% or more of budget used, needs approval), **recommend** (within budget but cheaper settings available), **block** (over budget, server never runs it even with approval)
+- Five recommendation rules: simple HR question, large context, long output expected, repeated question, budget nearly used
+- Actual token counts come from Gemini's usage report (thinking tokens count as output)
+- Estimated vs actual difference saved after every request
+- Monthly budgets reset automatically. Past-month usage is kept in history
+- All cost figures are estimated equivalent costs. The free Gemini tier does not bill
+
+### Admin
+
+- Cost dashboard: total spend, cost by user, department, project and model, daily and monthly trends, budget utilization, estimated vs actual, top expensive users and conversations
+- Seat utilization CSV demo: unused seats, inactive seats, premium seats to downgrade, potential monthly saving
+- Admin-only query logs with latency, model, tokens, cost, evidence and groundedness scores
+- All cost endpoints return 403 for non-admins
+
+
+## Access control
+
+Each document stores an owner, a list of allowed roles and a list of allowed user IDs.
+
+| Rule | Who gets access |
+|---|---|
+| Owner | Always |
+| Allowed roles | Every user with that role |
+| Allowed user IDs | Only those specific users |
+| Share with manager | Only the uploader's assigned manager |
+| Admin | Always sees everything |
+
+The permission filter runs before retrieval. The vector search uses Chroma metadata filters. The BM25 index is built only from documents the user can access. The retriever also runs a final access check on every hydrated chunk.
+
+### User Hierarchy
 
 ```text
                         ┌─────────────┐
@@ -108,354 +175,220 @@ The main rule is simple: **private chunks should never be retrieved and then fil
 - **Priya** is an independent Developer and has no assigned manager.
 - Priya can still receive explicit access to a document through user-specific sharing.
 
-## Tech Stack
 
-- Python 3.11
-- FastAPI
-- Streamlit
-- SQLAlchemy
-- SQLite
-- ChromaDB
-- LangGraph
-- rank-bm25
-- OpenAI-compatible clients
-- Optional Anthropic, Gemini, and Ollama support
-- pytest
-- Docker Compose
+## Sample documents
 
-## Running With Docker
+12 documents load automatically on startup. No upload is needed to test the app.
 
-```bash
-cp .env.example .env
+| File | Audience |
+|---|---|
+| engineering-code-review-guidelines.txt | developers, agent developers |
+| engineering-oncall-incident-runbook.txt | developers, agent developers |
+| ai-model-evaluation-standards.txt | agent developers, developers |
+| ai-tools-data-handling-policy.txt | everyone |
+| manager-performance-review-guide.txt | managers, HR |
+| manager-hiring-interview-process.txt | managers, HR |
+| hr-expense-travel-policy.txt | everyone |
+| it-security-access-policy.txt | everyone |
+| company-leave-policy.txt | everyone |
+| hr-onboarding-guide.txt | everyone |
+| private-project-notes.txt | priya, lemesh, amit only |
+| project-schedule.txt | everyone |
+
+### Test questions to try
+
+| Sign in as | Question | Expected |
+|---|---|---|
+| priya | How many approvals does a pull request need? | Answer with citation |
+| priya | How long does a performance improvement plan last? | Refusal (no access to manager guide) |
+| amit | How long does a performance improvement plan last? | Answer: 60 days |
+| khushi | What are the Apollo project milestones? | Refusal (private doc) |
+| admin | What are the main risks in Project Apollo? | Answer with citation |
+| any | What is the CEO salary? | Refusal (not in any document) |
+
+
+## Local setup
+
+**Prerequisites:** Python 3.11, Docker Desktop, Git
+
+**Clone and configure:**
+
+```powershell
+git clone https://github.com/LemeshKN/secure-office-rag-assistant.git
+cd secure-office-rag-assistant
+copy .env.example .env
+# Open .env and add your GEMINI_API_KEY
+```
+
+**Run with Docker (recommended):**
+
+```powershell
 docker compose up --build
 ```
 
 Then open:
-
 - Frontend: http://localhost:8501
-- Backend docs: http://localhost:8000/docs
-- Health check: http://localhost:8000/health
+- Backend health: http://localhost:8000/health
 
-If Windows blocks port `8501` with `WinError 10013`, run the frontend locally on another port such as `8640`.
+**Run without Docker:**
 
-## Local Development
-
-Start the backend:
-
-```bash
+Backend (terminal 1):
+```powershell
 cd backend
-python -m venv .venv
-.venv\Scripts\activate
-python -m pip install -r requirements.txt
-python -m uvicorn app.main:app --reload --port 8000
+python -m venv .venv311
+.\.venv311\Scripts\activate
+pip install -r requirements.txt
+uvicorn app.main:app --reload --port 8000
 ```
 
-Start the frontend in a second terminal:
-
-```bash
+Frontend (terminal 2):
+```powershell
 cd frontend
-python -m venv .venv
-.venv\Scripts\activate
-python -m pip install -r requirements.txt
-set BACKEND_URL=http://localhost:8000
-python -m streamlit run streamlit_app.py --server.port 8640
+python -m venv .venv311
+.\.venv311\Scripts\activate
+pip install -r requirements.txt
+streamlit run streamlit_app.py --server.port 8501
 ```
 
-On PowerShell, use this instead of `set`:
+**Run tests:**
 
 ```powershell
-$env:BACKEND_URL="http://localhost:8000"
-python -m streamlit run streamlit_app.py --server.address=127.0.0.1 --server.port=8640
-```
-
-The backend requirements skip `sentence-transformers` on Windows by default because PyTorch can fail on long paths. The app still runs through the deterministic embedding fallback. To install the optional semantic embedding stack on Windows, enable Windows Long Paths first, then run:
-
-```bash
-cd backend
-python -m pip install -r requirements-optional-windows.txt
-```
-
-## Demo Users
-
-| Username | Password | Role |
-| --- | --- | --- |
-| `admin` | `admin123` | `admin` |
-| `manager` | `manager123` | `manager` |
-| `employee` | `employee123` | `employee` |
-| `guest` | `guest123` | `guest` |
-
-These users are created automatically when the backend starts.
-
-## Sample Documents
-
-The `sample_documents/` folder contains small files for demonstrating RAG, sharing, and privacy behavior.
-
-| File | Purpose |
-| --- | --- |
-| `company-leave-policy.txt` | Test general policy questions |
-| `hr-onboarding-guide.txt` | Test HR-role document access |
-| `private-project-notes.txt` | Test private document isolation |
-| `project-schedule.txt` | Test manager sharing |
-
-Example questions:
-
-```text
-How many paid leave days do employees receive per year?
-When is the MapleBridge project checkpoint scheduled?
-What must new employees complete on their first day?
-When is the internal budget review scheduled?
-```
-
-## Demo Walkthrough
-
-1. Log in as `manager / manager123`.
-2. Upload `project-schedule.txt`.
-3. Select **Share with my manager**.
-4. Log in as the assigned manager and ask:
-
-   ```text
-   When is the MapleBridge project checkpoint scheduled?
-   ```
-
-5. Confirm the manager receives a citation-grounded answer.
-6. Log in as a user without access and ask the same question.
-7. Confirm the system refuses instead of revealing the document content.
-8. Test user-specific sharing by sharing a document with another user’s ID.
-9. Open **Evaluation** and test retrieval precision using the document ID.
-10. Log in as `admin / admin123` and open Admin Logs to review saved queries.
-
-## API Endpoints
-
-| Method | Path | Purpose |
-| --- | --- | --- |
-| `POST` | `/auth/login` | Create a JWT access token |
-| `GET` | `/auth/me` | Return the current user |
-| `GET` | `/auth/me/manager` | Return the current user’s assigned manager |
-| `GET` | `/auth/users` | List users for user-specific sharing |
-| `POST` | `/documents/upload` | Upload and ingest a document |
-| `GET` | `/documents` | List accessible documents |
-| `POST` | `/chat` | Run the RAG workflow |
-| `POST` | `/conversations` | Create a chat conversation |
-| `GET` | `/conversations` | List the current user’s conversations |
-| `GET` | `/conversations/{id}/messages` | Get messages in a conversation |
-| `POST` | `/conversations/{id}/messages` | Ask a question and save the response |
-| `POST` | `/conversations/{id}/messages/stream` | Ask a question with word-by-word streaming |
-| `DELETE` | `/conversations/{id}` | Delete a conversation |
-| `POST` | `/evaluate/query` | Run a query with evaluation metrics |
-| `GET` | `/logs` | Admin-only query logs with token and cost fields|
-| `GET` | `/health` | Backend health check |
-| `GET` | `/cost/me` | Current user's department, budgets and projects |
-| `POST` | `/cost/estimate` | Pre-flight estimate, policy decision and recommendations |
-| `GET` | `/cost/admin/summary` | Admin: total spend, requests, tokens |
-| `GET` | `/cost/admin/by-user`, `/by-department`, `/by-project`, `/by-model` | Admin: cost breakdowns |
-| `GET` | `/cost/admin/trend/daily`, `/trend/monthly` | Admin: spend trends |
-| `GET` | `/cost/admin/budgets` | Admin: budget utilization |
-| `GET` | `/cost/admin/estimated-vs-actual` | Admin: estimate accuracy |
-| `GET` | `/cost/admin/top-users`, `/top-conversations` | Admin: top spenders |
-| `POST` | `/cost/admin/seats/analyze` | Admin: seat utilization from a CSV |
-
-## How Access Control Works
-
-Each document stores:
-
-- owner user ID
-- allowed roles
-- allowed user IDs
-
-The rules are:
-
-- Admins can access everything.
-- Owners can access their own documents.
-- A role can access a document only when that role is listed in `allowed_roles`.
-- A user can access a document when their user ID is listed in `allowed_user_ids`.
-- A manager can access an employee’s document when the employee selects **Share with my manager**.
-
-### Sharing methods
-
-| Method | Who gets access |
-| --- | --- |
-| Allowed roles | Everyone with the selected role |
-| Allowed user IDs | Only the selected users |
-| Share with my manager | Only the uploader’s assigned manager |
-
-This matters most during retrieval. The app does not retrieve a large pool of private chunks and clean it up later. Permission filters are applied before vector candidates are returned and before the keyword index is searched.
-
-## RAG Workflow
-
-The RAG workflow lives in `backend/app/rag/graph.py`.
-
-The flow is:
-
-1. Retrieve accessible chunks.
-2. Rerank them.
-3. Score the available evidence.
-4. Refuse if the evidence is too weak.
-5. Generate an answer using only the retrieved context.
-6. Check groundedness with a deterministic heuristic.
-7. Return the answer, citations, metrics, and retrieved metadata.
-
-The generation prompt tells the model to answer only from provided context and cite every factual claim using `[doc_id:chunk_id]`.
-
-## Cost Governance
-
-Every chat request goes through one function, `run_governed`. The routes `/chat`, the stream route, `send_message` and `/evaluate/query` all use it.
-
-1. The server runs permission-filtered retrieval and builds the final prompt. No LLM call happens.
-2. It estimates the cost: input tokens (characters divided by 4, rounded up) plus the output limit (default 800), priced from the model's rate.
-3. It checks the user, department and project budgets. The lowest remaining amount decides.
-4. The policy returns one decision:
-   - **block**: the estimate is above the lowest remaining budget. The server never runs it, even if the browser sends approval.
-   - **warn**: the estimate uses 50% or more of the lowest remaining budget. The user must approve.
-   - **recommend**: within budget, but a rule found cheaper settings.
-   - **allow**: the request runs at once.
-5. After the run, the system saves actual tokens, actual cost and the difference from the estimate. It updates the budgets in the same commit.
-
-Budgets are monthly (Asia/Kolkata). A budget from a past month counts as used 0, and all usage history is kept.
-
-Costs are demo values. The LLM is a mock, so cost is real token counts times a price table, not a provider bill. The mock does not enforce the output limit, so actual cost is usually far below the estimate.
-
-Recommendation rules: simple question, large context, long output expected, repeated question (information only), budget nearly used.
-
-Settings in `.env`: `MAX_OUTPUT_TOKENS`, `WARN_THRESHOLD`, `LARGE_CONTEXT_TOKENS`, `RECOMMENDED_TOP_K`, `SHORT_OUTPUT_TOKENS`, `NEAR_BUDGET_RATIO`, `REPEAT_WINDOW_DAYS`.
-
-## Cost figures are estimated equivalent costs
-
-The Gemini free tier does not bill, so the dollar amounts in this app are not charges.
-They are the "estimated equivalent cost": the tokens used, priced at Gemini's paid rates.
-Budgets, warnings and the admin dashboard all use this number.
-
-- Prices live in one table: `backend/app/cost/pricing.py`.
-- `gemini-3.5-flash-lite` is priced at 0.30 USD input and 2.50 USD output per 1M tokens.
-- `gemini-3.8-flash` is priced at 0.75 USD input and 3.75 USD output per 1M tokens
-  through 2026-12-31. Google raises it to 1.50 and 7.50 on 2027-01-01.
-- After a request, token counts come from the numbers Gemini reports. Thinking tokens
-  count as output. The estimate before a request uses characters divided by 4.
-- Mock models are priced from the same table.
-- On the free tier, Google may use requests to improve its products. Use only sample or
-  public documents with a free key.
-
-### Example flow
-
-1. Priya (developer, Engineering) uploads her private project notes.
-2. She picks `mock-large` and asks: "Summarize the private project notes."
-3. A card shows the estimate (about $0.008), her remaining budget and a recommendation to limit output to 300 tokens.
-4. She clicks Accept recommendation. The server recalculates the estimate and runs the request once.
-5. The answer carries `[doc_id:chunk_id]` citations.
-6. Admin opens Cost Dashboard and sees Engineering spend, estimated vs actual and budget utilization updated.
-
-### Admin access
-
-Admin can see every document in RAG answers, including private notes. This is intended. Every other role sees only documents it owns or that are shared with it, and the permission filter runs before retrieval.
-
-### Seat utilization demo
-
-Admin uploads a CSV of AI seats and sets seat prices. The page shows unused seats, inactive seats, premium seats to downgrade and the potential monthly saving. It uses demo data only and saves nothing.
-
-## Sample documents and data on a free host
-
-On startup the app loads the files from `sample_documents/` that are not in the database yet. Restarting never creates duplicates.
-
-Free hosts such as Render's free plan can erase the disk when the service restarts or sleeps. After that, uploads, chats, cost history and the vector index may be gone, and the sample documents are loaded again at the next start. The first request after a sleep can take a minute.
-
-## Streaming Responses
-
-Chat answers are streamed word by word using Server-Sent Events (SSE).
-
-Backend endpoint:
-
-```text
-POST /conversations/{conversation_id}/messages/stream
-```
-
-The backend sends small text events to the frontend:
-
-```json
-{"type": "token", "content": "Employees"}
-```
-
-The Streamlit frontend updates the answer area as each event arrives.
-
-This improves perceived response speed, especially on slow internet connections.
-
-## Evaluation And Logging
-
-Every chat call is logged with:
-
-- user ID
-- question
-- answer
-- cited chunk IDs
-- retrieved chunk IDs
-- model name
-- latency
-- estimated cost
-- evidence score
-- groundedness score
-
-The evaluation endpoint also reports retrieval precision when expected document IDs are provided.
-
-Retrieval precision is calculated as:
-
-\[
-\text{Retrieval Precision} =
-\frac{\text{Correct retrieved chunks}}{\text{Total retrieved chunks}}
-\]
-
-For example, if 4 out of 5 retrieved chunks belong to the expected document, retrieval precision is `0.8`.
-
-## Tests
-
-```bash
 cd backend
 pytest -q
 ```
 
-The tests cover:
+180 tests cover RBAC, ingestion, retrieval permissions, citations, evidence refusal, cost calculation, budgets, policy, recommendations, governed run, admin APIs and seat utilization.
 
-- RBAC permission logic
-- chunking
-- retrieval permission filtering
-- citation formatting
-- weak-evidence refusal
-- strong single-chunk evidence
-- admin-only logs
-- cost calculation
-- budgets
-- policy
-- recommendations
-- governed run
-- admin cost APIs and seat utilization
 
-## Project Structure
+## Key environment variables
 
-```text
-backend/
-  app/
-    auth/
-    ingestion/
-    retrieval/
-    rag/
-    api/
-    logging_utils/
-  tests/
-frontend/
-sample_documents/
-data/
-docs/
-  DEPLOYMENT.md
-  screenshots/
+| Variable | Default | Purpose |
+|---|---|---|
+| `GEMINI_API_KEY` | | Gemini API key (required for answers and embeddings) |
+| `GEMINI_MODEL` | gemini-3.5-flash-lite | LLM model |
+| `GEMINI_EMBEDDING_MODEL` | gemini-embedding-001 | Embedding model |
+| `EMBEDDING_PROVIDER` | auto | Set to `gemini` for semantic embeddings |
+| `EVIDENCE_THRESHOLD` | 0.45 | Minimum score to answer (use 0.50 with Gemini embeddings) |
+| `SECRET_KEY` | change-me-in-production | JWT signing key |
+| `ADMIN_PASSWORD` | admin123 | Admin account password |
+| `ENVIRONMENT` | local | Set to `production` to enforce strong secrets |
+| `PUBLIC_DEMO` | false | Set to `true` to show demo account hints on login |
+| `MAX_OUTPUT_TOKENS` | 800 | Default output limit per request |
+| `WARN_THRESHOLD` | 0.50 | Budget share that triggers a warning |
+
+Never commit `.env`. Copy `.env.example` and fill in your values.
+
+
+## API endpoints
+
+| Method | Path | Purpose |
+|---|---|---|
+| POST | /auth/login | Get a JWT token |
+| GET | /auth/me | Current user |
+| POST | /documents/upload | Upload and embed a document |
+| GET | /documents | List accessible documents |
+| POST | /chat | RAG answer (non-streaming) |
+| POST | /conversations | Create a conversation |
+| POST | /conversations/{id}/messages/stream | Streaming RAG answer |
+| POST | /conversations/{id}/messages | RAG answer saved to conversation |
+| DELETE | /conversations/{id} | Delete a conversation |
+| POST | /evaluate/query | RAG answer with retrieval precision |
+| GET | /logs | Admin-only query logs |
+| GET | /health | Health check |
+| GET | /cost/me | Current user budgets and projects |
+| POST | /cost/estimate | Pre-flight estimate and policy decision |
+| GET | /cost/admin/summary | Admin: total spend |
+| GET | /cost/admin/by-user | Admin: cost by user |
+| GET | /cost/admin/by-department | Admin: cost by department |
+| GET | /cost/admin/by-project | Admin: cost by project |
+| GET | /cost/admin/by-model | Admin: cost by model |
+| GET | /cost/admin/trend/daily | Admin: daily spend trend |
+| GET | /cost/admin/trend/monthly | Admin: monthly spend trend |
+| GET | /cost/admin/budgets | Admin: budget utilization |
+| GET | /cost/admin/estimated-vs-actual | Admin: estimate accuracy |
+| GET | /cost/admin/top-users | Admin: top spenders |
+| GET | /cost/admin/top-conversations | Admin: most expensive conversations |
+| POST | /cost/admin/seats/analyze | Admin: seat utilization from CSV |
+
+
+## Limits
+
+- **Data resets on restart.** Render's free tier uses ephemeral disk storage. Uploads, chats and cost history may be lost when the service restarts. The 12 sample documents reload automatically.
+- **First visit takes up to 60 seconds.** Free services sleep after 15 minutes of inactivity and wake on the next request.
+- **Gemini free quota is shared.** If the daily limit is reached, users see a rate limit message.
+- **SQLite for simplicity.** A production deployment would use PostgreSQL.
+- **Free Gemini tier.** Uploaded text and questions may be used by Google to improve its products. Use only sample or public files.
+
+
+## Using the app
+
+**Sign in:** Enter your username and password and click **Sign in**.
+
+**Upload a document:**
+
+1. Open **Upload Documents**.
+2. Select a file and enter a title.
+3. Choose sharing options: allowed roles, specific users, or **Share with my manager**.
+4. Click **Upload**.
+
+**Ask a question:**
+
+1. Open **Chat**.
+2. Select or create a conversation.
+3. Enter your question.
+4. Open **Sources** to see the referenced documents and scores.
+
+**Cost card:** If your request triggers a warn or recommend decision, a card appears before the answer. It shows the estimated cost, your remaining budget and recommendations. Click **Accept recommendation**, **Run anyway** or **Cancel**.
+
+**Admin cost dashboard:** Sign in as admin and open **Cost Dashboard** to see total spend, cost by user, department, project and model, estimated vs actual, and top spenders.
+
+**Stop the app:**
+
+```powershell
+docker compose down
 ```
 
-## Future Improvements
 
-- Replace demo auth with a real identity provider.
-- Add background jobs for large document ingestion.
-- Add tenant isolation and audit export.
-- Add pgvector or OpenSearch as retrieval backends.
-- Add CI for linting, tests, and Docker build validation.
-- Add optional LLM-as-judge evaluation with cost controls.
-- Upgrade streaming from word-by-word response streaming to native token-by-token streaming for each LLM provider.
+## Evaluation
 
-## Resume Bullet
+The **Evaluation** page checks whether the system retrieves the correct document for a question.
 
-Built an enterprise RAG and agentic workflow platform with role-based document access, user-specific and manager-based sharing, hybrid retrieval, reranking, citation-grounded generation, hallucination detection, conversation history, streaming responses, and automated evaluation. Deployed with FastAPI, Streamlit, Docker, ChromaDB, LangGraph, and multi-provider LLM support, with tracking for latency, cost, groundedness, and retrieval quality.
+**Retrieval precision** = correct retrieved chunks / total retrieved chunks
+
+**Worked example:**
+
+Upload `company-leave-policy.txt`. Note its document ID from the Documents page. Then open Evaluation and fill in:
+
+| Field | Value |
+|---|---|
+| Question | How many paid leave days do employees receive per year? |
+| Expected document IDs | the document ID you noted |
+| Expected result | Retrieval precision of 0.8 or higher |
+
+
+## Troubleshooting
+
+| Problem | Fix |
+|---|---|
+| Backend does not start | Check the virtual environment and installed requirements |
+| Frontend cannot connect | Confirm the backend is running on port 8000 |
+| No answer returned | Check that your user has access to the relevant documents |
+| Docker fails | Confirm Docker Desktop is running and ports are free |
+| First visit is slow | Free hosting sleeps after 15 minutes. Wait 60 seconds and refresh |
+| Rate limit message | Wait 1 minute. The free Gemini quota is shared across all demo users |
+
+
+## Future improvements
+
+- Replace SQLite with PostgreSQL for production reliability
+- Add a manager approval workflow for blocked requests
+- Add LLM-as-judge evaluation with cost controls
+- Add token-by-token streaming per LLM provider instead of word-by-word splitting
+- Add CI with GitHub Actions running pytest, linting and Docker build
+- Add pgvector or OpenSearch as retrieval backends
+- Add SSO and multi-tenant support
+
+
+## License
+
+MIT License. Copyright (c) 2026 LemeshKN. Free to use, copy and modify with attribution.
